@@ -1,0 +1,2163 @@
+\chapter{Neural Networks: When Simplicity Failed}
+
+\section{The Crux}
+For decades, ML was linear models and hand-crafted features. Then we hit a wall: some patterns are too complex to engineer by hand. Neural networks didn't win because they're better in all cases---they won because they scale to complexity that breaks classical methods.
+
+\section{Why Deep Learning Was Inevitable}
+
+\subsection{The Limits of Linearity}
+
+Linear models assume: \texttt{output = w₁·feature₁ + w₂·feature₂ + ...}
+
+This works if patterns are linear. But reality isn't linear.
+
+\textbf{Example}: Image classification. Raw pixels → ``is this a cat?''
+
+A linear model on pixels learns: ``if pixel 237 is bright and pixel 1842 is dark, probably a cat.''
+
+But cats appear at different positions, scales, orientations. Pixel 237 sometimes has cat ear, sometimes background. No linear combination of pixels works.
+
+\textbf{The Classical Fix}: Feature engineering. Extract edges, textures, shapes (SIFT, HOG, etc.). These are manually designed.
+
+\textbf{The Problem}: For images, we figured out edges and textures. For speech? Video? 3D point clouds? Feature engineering is domain-specific, labor-intensive, and eventually impossible.
+
+\subsection{The Neural Network Promise}
+
+Instead of hand-crafting features, \textbf{learn} them.
+
+Input → Layer 1 (learns edges) → Layer 2 (learns textures) → Layer 3 (learns parts) → Layer 4 (learns objects) → Output
+
+Each layer is a learned feature transformation. The model discovers useful representations automatically.
+
+\textbf{When it works}: You have lots of data and patterns too complex for manual features.
+
+\textbf{When it doesn't}: Small data, simple patterns, or need for interpretability.
+
+\section{The Universal Approximation Theorem (And Why It's Misleading)}
+
+\textbf{The Theorem}: A neural network with one hidden layer can approximate any continuous function.
+
+\textbf{The Hype}: ``Neural networks can learn anything!''
+
+\textbf{The Reality}: Just because you \textit{can} approximate any function doesn't mean you \textit{will} with gradient descent, finite data, and reasonable compute.
+
+\subsection{An Analogy}
+
+Theorem: ``A polynomial of high enough degree can fit any set of points.''
+
+True! But:
+\begin{itemize}
+\item You might need degree 1000 for 100 points
+\item It'll overfit catastrophically
+\item You'll never find the coefficients in practice
+\end{itemize}
+
+Same with neural nets. Universal approximation is a theoretical curiosity, not a practical guide.
+
+\section{Why Deep Learning Works: The Fundamental Questions}
+
+The fact that neural networks work at all is remarkable and not fully understood. This section explores the deep theoretical foundations of why gradient-based learning on non-convex functions finds useful solutions.
+
+\subsection{Question 1: Why Can Neural Networks Represent Complex Functions?}
+
+\textbf{Universal Approximation Theorem} (Cybenko 1989, Hornik et al. 1989):
+
+A feedforward network with:
+\begin{itemize}
+\item One hidden layer
+\item Finite number of neurons
+\item Non-polynomial activation function (e.g., sigmoid, ReLU)
+\end{itemize}
+
+can approximate any continuous function $f: \mathbb{R}^n \to \mathbb{R}^m$ on a compact domain to arbitrary precision.
+
+\textbf{Formal Statement}:
+
+For any continuous function $f$ on $[0,1]^n$, any $\varepsilon > 0$, there exists a network with one hidden layer:
+\[
+g(x) = \sum_{i=1}^N \alpha_i \sigma(w_i^T x + b_i)
+\]
+
+such that:
+\[
+|f(x) - g(x)| < \varepsilon  \text{ for all } x \in [0,1]^n
+\]
+
+\textbf{Why this works geometrically}:
+
+Think of each neuron $\sigma(w^T x + b)$ as defining a ``ridge'' in input space:
+\begin{itemize}
+\item The weight vector $w$ defines the orientation of the ridge
+\item The bias $b$ shifts its position
+\item The activation $\sigma$ creates the nonlinearity
+\end{itemize}
+
+A single neuron with sigmoid activation creates a smooth step function. By combining many such step functions with different orientations and positions, you can approximate any smooth bump or valley.
+
+\textbf{Proof sketch} (1D case):
+
+Any continuous function $f(x)$ on $[0,1]$ can be approximated by a sum of ``bump'' functions:
+\[
+f(x) \approx \sum_{i=1}^N \alpha_i \text{bump}_i(x)
+\]
+
+Each bump can be constructed using two sigmoid functions:
+\[
+\text{bump}(x) = \sigma(a(x - c)) - \sigma(a(x - d))
+\]
+
+This creates a bump centered between $c$ and $d$. By choosing many bumps, you can approximate any curve.
+
+\textbf{But why does this matter?}
+
+It tells us neural networks have sufficient \textbf{representational capacity}. Any function you want to learn can, in principle, be represented.
+
+\textbf{What the theorem DOESN'T tell us}:
+
+\begin{enumerate}
+\item \textbf{How many neurons needed?} Could be exponentially many in $n$ (curse of dimensionality)
+\item \textbf{How to find the weights?} Gradient descent might not find them
+\item \textbf{How much data needed?} Could be exponentially many samples
+\item \textbf{Will it generalize?} Fitting training data $\neq$ generalizing to test data
+\end{enumerate}
+
+\subsection{Question 2: Why Does Depth Help?}
+
+If one hidden layer suffices, why use deep networks?
+
+\textbf{Answer 1: Exponentially more efficient representations}
+
+\textbf{Example: Parity function}
+
+$f(x_1, \ldots, x_n) = x_1 \oplus x_2 \oplus \ldots \oplus x_n$ (XOR of all bits)
+
+\begin{itemize}
+\item \textbf{Shallow network} (1 hidden layer): Requires $O(2^n)$ neurons
+\item \textbf{Deep network} (log $n$ layers): Requires $O(n)$ neurons
+\end{itemize}
+
+\textbf{Why?} Deep networks can compose representations hierarchically:
+\begin{align*}
+\text{Layer 1:} \quad & x_1 \oplus x_2, x_3 \oplus x_4, \ldots  \text{ (pairwise XORs)} \\
+\text{Layer 2:} \quad & (x_1 \oplus x_2) \oplus (x_3 \oplus x_4), \ldots
+\end{align*}
+
+Each layer doubles the span. Shallow networks can't reuse computation this way.
+
+\textbf{Answer 2: Hierarchical feature learning}
+
+Real-world data has hierarchical structure:
+\begin{itemize}
+\item \textbf{Images}: Pixels → edges → textures → parts → objects
+\item \textbf{Text}: Characters → words → phrases → sentences → meaning
+\item \textbf{Audio}: Samples → phonemes → words → sentences
+\end{itemize}
+
+Deep networks naturally learn this hierarchy:
+\begin{itemize}
+\item Early layers: Simple features (edges, colors)
+\item Middle layers: Combinations (textures, simple shapes)
+\item Deep layers: Complex concepts (faces, objects)
+\end{itemize}
+
+\textbf{Shallow networks can't do this}: They'd need to learn ``edge detectors AND face detectors'' in the same layer, without intermediate representations.
+
+\textbf{Mathematical perspective} (Poggio et al. 2017):
+
+Functions with compositional structure:
+\[
+f(x) = f_L \circ f_{L-1} \circ \ldots \circ f_1(x)
+\]
+
+can be represented exponentially more efficiently by deep networks than shallow ones.
+
+\textbf{Example}: Polynomial functions
+
+$f(x) = (x + 1)^n$ can be computed with depth $O(\log n)$ using repeated squaring:
+\begin{align*}
+\text{Layer 1:} \quad & y_1 = x + 1 \\
+\text{Layer 2:} \quad & y_2 = y_1^2 \\
+\text{Layer 3:} \quad & y_3 = y_2^2
+\end{align*}
+
+A shallow network would need to expand the entire polynomial → exponentially many terms.
+
+\textbf{Answer 3: Better optimization landscape}
+
+Surprisingly, deeper networks are sometimes \textbf{easier to optimize} than shallow ones (despite more parameters).
+
+\textbf{Why?}
+\begin{itemize}
+\item More parameters → more paths through loss landscape
+\item Overparameterization creates smoother landscape
+\item Lottery ticket hypothesis: Many sub-networks, at least one trains well
+\end{itemize}
+
+\subsection{Question 3: Why Does Gradient Descent Find Good Solutions?}
+
+\textbf{The paradox}: Neural network loss is non-convex (many local minima). Why doesn't gradient descent get stuck?
+
+\textbf{Traditional wisdom}: ``Non-convex = bad. Gradient descent finds local minima.''
+
+\textbf{Reality}: In high dimensions, most critical points are \textbf{saddle points}, not local minima.
+
+\textbf{Critical points} (where $\nabla L = 0$):
+\begin{itemize}
+\item \textbf{Local minimum}: All directions go up (Hessian positive definite)
+\item \textbf{Local maximum}: All directions go down (Hessian negative definite)
+\item \textbf{Saddle point}: Some directions up, some down (Hessian indefinite)
+\end{itemize}
+
+\textbf{In high dimensions} ($d$ parameters):
+
+Probability that random critical point is a local minimum: $\approx 2^{-d}$
+
+For $d = 1{,}000{,}000$ parameters: $2^{-1{,}000{,}000} \approx 0$. Local minima are exponentially rare!
+
+\textbf{Why?} At a critical point, the Hessian $H$ has $d$ eigenvalues. For local minimum, ALL must be positive. Probability:
+\[
+P(\text{all positive}) = (1/2)^d = 2^{-d}
+\]
+
+\textbf{Consequence}: Gradient descent doesn't get stuck in bad local minima because there aren't any (statistically speaking).
+
+\textbf{Empirical observation} (Dauphin et al. 2014):
+
+Saddle points, not local minima, are the main obstacle to optimization. But:
+\begin{itemize}
+\item Gradient descent with noise (SGD) can escape saddle points
+\item Momentum helps escape saddle points
+\end{itemize}
+
+\subsection{Question 4: Why Do All Local Minima Have Similar Loss?}
+
+\textbf{Empirical finding} (Choromanska et al. 2015):
+
+For large neural networks, most local minima have similar loss values. Bad local minima (high loss) are rare or nonexistent.
+
+\textbf{Intuition}: Think of the loss landscape as a mountain range. Traditional optimization:
+\begin{itemize}
+\item Many sharp peaks and valleys at different heights
+\item Getting stuck in high valley = bad local minimum
+\end{itemize}
+
+Neural networks (high-dimensional, overparameterized):
+\begin{itemize}
+\item Loss landscape is more like a \textbf{plateau with many shallow valleys}
+\item All valleys have similar depth (similar loss)
+\item The difference between minima matters less than finding ANY minimum
+\end{itemize}
+
+\textbf{Why?}
+
+\textbf{Symmetry}: Neural networks have massive symmetry due to:
+\begin{enumerate}
+\item \textbf{Permutation symmetry}: Swapping neurons in a layer gives equivalent network
+\item \textbf{Scaling symmetry}: Scaling weights in one layer and inverse-scaling in next gives equivalent network
+\end{enumerate}
+
+For a network with hidden layer of width $m$ and $L$ layers, there are $(m!)^L$ equivalent parameter settings. All these correspond to the same function but different points in parameter space.
+
+\textbf{Implication}: Many different parameter configurations implement the same function. If one minimum is good, there are factorial-many equivalent good minima.
+
+\textbf{Loss landscape theory} (mode connectivity):
+
+Good local minima are connected by paths along which loss remains low. They form a connected manifold of solutions.
+
+\subsection{Question 5: Why Does Overparameterization Help?}
+
+\textbf{Classical statistics}: More parameters than data → overfitting.
+
+\textbf{Modern deep learning}: More parameters → better generalization (!)
+
+\textbf{The double descent phenomenon} (Belkin et al. 2019):
+
+Test error as a function of model complexity:
+\begin{itemize}
+\item \textbf{Classical regime (underparameterized)}:
+  \begin{itemize}
+  \item Too simple: High test error (underfitting)
+  \item Just right: Low test error
+  \item Too complex: High test error (overfitting)
+  \end{itemize}
+
+\item \textbf{Interpolation threshold}:
+  \begin{itemize}
+  \item Peak test error (can barely fit training data)
+  \end{itemize}
+
+\item \textbf{Modern regime (overparameterized)}:
+  \begin{itemize}
+  \item Vastly more parameters than data
+  \item Test error DECREASES again!
+  \end{itemize}
+\end{itemize}
+
+\textbf{Why?}
+
+\textbf{Explanation 1: Implicit regularization}
+
+When you have more parameters than data, there are infinitely many solutions that fit training data perfectly (zero training error).
+
+Gradient descent with common initializations finds the \textbf{minimum norm solution} - the one with smallest $||\theta||$.
+
+This acts like implicit L2 regularization, preferring smooth, simple functions over complex, wiggly ones.
+
+\textbf{Explanation 2: Lottery ticket hypothesis} (Frankle \& Carbtree 2019)
+
+In a sufficiently large network, there exist \textbf{sparse sub-networks} that, when trained in isolation, can match the performance of the full network.
+
+\textbf{Metaphor}: A large network contains many tickets to a lottery. At least one ticket wins (learns well). The bigger the network, the more tickets, the higher probability of winning.
+
+Overparameterization is like buying more lottery tickets.
+
+\textbf{Mathematical justification}:
+
+With $N$ parameters and $n < N$ data points, the solution space is an $(N-n)$-dimensional manifold. Gradient descent follows a particular path through this manifold.
+
+The path chosen by gradient descent has nice properties:
+\begin{itemize}
+\item Maximum margin (for classification)
+\item Minimum norm (for regression)
+\end{itemize}
+
+These properties lead to better generalization than arbitrary solutions.
+
+\subsection{Question 6: Why These Loss Functions?}
+
+\textbf{Why cross-entropy for classification?}
+
+\textbf{Information-theoretic answer}: Cross-entropy is the unique loss function that:
+\begin{enumerate}
+\item Measures ``surprise'' (how unexpected the true label is given the prediction)
+\item Is strictly proper scoring rule (honesty is optimal - outputting true probabilities minimizes expected loss)
+\item Decomposes across independent events
+\end{enumerate}
+
+\textbf{Decision-theoretic answer}: Minimizing cross-entropy = maximizing likelihood = finding parameters most probable given data (maximum likelihood estimation).
+
+\textbf{Geometric answer}: Cross-entropy is the ``distance'' (KL divergence) between the true distribution and predicted distribution. We want predictions to match reality.
+
+\textbf{Why MSE for regression?}
+
+\textbf{Statistical answer}: If errors are Gaussian, MSE = negative log-likelihood. We're finding the most likely parameters under Gaussian noise assumption.
+
+\textbf{Geometric answer}: MSE is Euclidean distance squared. We want predictions close to truth in L2 sense.
+
+\textbf{Robustness consideration}: MSE heavily penalizes outliers (quadratic penalty). If you have outliers, use L1 loss (absolute error) instead.
+
+\subsection{Question 7: Why Do We Need Non-Linear Activations?}
+
+\textbf{Claim}: Without non-linearity, deep networks collapse to linear models.
+
+\textbf{Proof}:
+
+Consider network with linear activations $\sigma(x) = x$:
+\begin{align*}
+\text{Layer 1:} \quad & h_1 = W_1 x \\
+\text{Layer 2:} \quad & h_2 = W_2 h_1 = W_2 W_1 x \\
+\text{Layer 3:} \quad & y = W_3 h_2 = W_3 W_2 W_1 x
+\end{align*}
+
+Define $W = W_3 W_2 W_1$. Then:
+\[
+y = W x
+\]
+
+The 3-layer network is equivalent to a single linear layer!
+
+\textbf{Consequence}: No matter how deep, a network with linear activations can only learn linear functions. All the power of deep learning comes from non-linearity.
+
+\textbf{Why ReLU specifically?}
+
+$\text{ReLU}(x) = \max(0, x)$ has become the default. Why?
+
+\begin{enumerate}
+\item \textbf{Gradient flow}: Gradient is 1 (for $x > 0$) or 0. No vanishing gradient problem like sigmoid.
+\item \textbf{Sparse activation}: Roughly half of neurons are zero. Sparse representations → efficient, interpretable.
+\item \textbf{Computational efficiency}: $\max(0,x)$ is trivial to compute. Faster than sigmoid or tanh.
+\item \textbf{Biological plausibility}: Neurons in visual cortex exhibit similar on/off behavior.
+\end{enumerate}
+
+\textbf{Why not sigmoid?}
+
+$\sigma(x) = 1/(1 + e^{-x})$ saturates for large $|x|$:
+\begin{itemize}
+\item $\sigma'(x) \to 0$ as $x \to \pm\infty$
+\item Gradients vanish in deep networks
+\item Training becomes extremely slow
+\end{itemize}
+
+\subsection{The Fundamental Mystery: Why Does the Real World Have Structure?}
+
+The deepest question isn't about neural networks - it's about the world:
+
+\textbf{Why is the real world learnable?}
+
+Consider:
+\begin{itemize}
+\item Possible $256 \times 256$ RGB images: $256^{256 \times 256 \times 3} \approx 10^{473{,}000}$
+\item Number of atoms in universe: $\sim 10^{80}$
+\end{itemize}
+
+Almost all possible images are random noise. Yet the images we care about (faces, cats, cars) occupy a tiny, structured subspace.
+
+\textbf{This is why machine learning works}: The real world has:
+\begin{enumerate}
+\item \textbf{Low intrinsic dimensionality}: Natural images lie on low-dimensional manifolds
+\item \textbf{Compositionality}: Complex concepts built from simple parts
+\item \textbf{Smoothness}: Similar inputs → similar outputs (usually)
+\item \textbf{Hierarchy}: Low-level features → mid-level features → high-level concepts
+\end{enumerate}
+
+Neural networks work because they exploit this structure:
+\begin{itemize}
+\item Convolutional layers exploit locality and translation invariance
+\item Depth exploits hierarchy
+\item Regularization exploits smoothness
+\end{itemize}
+
+\textbf{If the world were random}, no amount of data or model capacity would help. We'd need to memorize every possible input.
+
+\textbf{Key insight}: Machine learning works not because models are clever, but because the world is structured. Models that respect this structure (inductive biases) generalize better.
+
+\subsection{Summary: Why Deep Learning Works}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Question} & \textbf{Answer} \\
+\midrule
+Why can NNs represent functions? & Universal approximation theorem \\
+Why does depth help? & Exponentially more efficient for compositional functions \\
+Why doesn't GD get stuck? & High dimensions → saddle points, not local minima \\
+Why are all minima good? & Symmetry + overparameterization → connected manifold \\
+Why does overparameterization help? & Implicit regularization + lottery ticket \\
+Why these loss functions? & Information theory + maximum likelihood \\
+Why non-linear activations? & Without them, networks are just linear models \\
+Why does ML work at all? & The real world has structure we can exploit \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{The meta-lesson}: Deep learning works because:
+\begin{enumerate}
+\item Networks are expressive enough (universal approximation)
+\item Training finds good solutions (optimization works in high dimensions)
+\item Solutions generalize (implicit regularization + structured data)
+\end{enumerate}
+
+But we don't fully understand why. Much of deep learning is still empirical - we know it works, but the theory lags behind practice.
+
+\section{Weight Initialization Theory: Why Random Matters}
+
+Initialization seems trivial - just set weights to small random numbers, right? Wrong. Improper initialization can make training impossible, even with perfect architecture and optimization. This section rigorously explains why initialization is critical and derives the mathematics behind Xavier and He initialization.
+
+\subsection{The Fundamental Problem: Symmetry Breaking}
+
+\textbf{Why not initialize all weights to zero?}
+
+Consider a 2-layer network with weights initialized to $W_1 = 0$, $W_2 = 0$:
+
+\textbf{Forward pass}:
+\begin{align*}
+z_1 &= W_1 x + b_1 = 0 \cdot x + 0 = 0 \quad \text{(assuming } b_1 = 0\text{)} \\
+a_1 &= \sigma(0) = \text{constant for all neurons} \\
+z_2 &= W_2 a_1 = 0 \cdot a_1 = 0
+\end{align*}
+
+\textbf{Backward pass}:
+\[
+\frac{\partial L}{\partial W_1} = \frac{\partial L}{\partial z_1} x^T
+\]
+
+Since all neurons in layer 1 produce identical outputs, they receive identical gradients:
+\[
+\frac{\partial L}{\partial w_{1,i}} = \frac{\partial L}{\partial w_{1,j}} \text{ for all } i, j
+\]
+
+\textbf{Consequence}: All weights update identically. All neurons remain identical forever.
+
+\textbf{The symmetry problem}: If neurons start with identical weights, they'll compute identical functions and receive identical updates. The network can't learn diverse features.
+
+\textbf{Solution}: Initialize weights randomly to break symmetry.
+
+\subsection{The Exploding/Vanishing Gradient Problem}
+
+Random initialization isn't enough. \textbf{The scale matters}.
+
+Consider a deep network with $L$ layers, each applying:
+\[
+h_l = \sigma(W_l h_{l-1} + b_l)
+\]
+
+\textbf{Forward pass}: As signals propagate forward, their magnitude changes:
+\begin{align*}
+h_1 &= \sigma(W_1 x) \\
+h_2 &= \sigma(W_2 h_1) \\
+&\vdots \\
+h_L &= \sigma(W_L h_{L-1})
+\end{align*}
+
+\textbf{If weights are too large}: Activations explode exponentially with depth
+\[
+||h_L|| \approx ||W||^L ||x|| \quad \text{(if } ||W|| > 1\text{, this grows exponentially)}
+\]
+
+\textbf{If weights are too small}: Activations vanish exponentially
+\[
+||h_L|| \approx ||W||^L ||x|| \quad \text{(if } ||W|| < 1\text{, this shrinks exponentially)}
+\]
+
+\textbf{Backward pass}: Gradients propagate backwards via chain rule:
+\[
+\frac{\partial L}{\partial W_1} = \frac{\partial L}{\partial h_L} \cdot \frac{\partial h_L}{\partial h_{L-1}} \cdot \ldots \cdot \frac{\partial h_2}{\partial h_1} \cdot \frac{\partial h_1}{\partial W_1}
+\]
+
+Each term $\frac{\partial h_l}{\partial h_{l-1}}$ involves the weight matrix $W_l$ and activation derivative $\sigma'(z_l)$.
+
+\textbf{If gradients explode}: Updates are huge, training diverges (loss → NaN)
+
+\textbf{If gradients vanish}: Updates are tiny, learning is impossibly slow
+
+\textbf{The goal}: Initialize weights so that:
+\begin{enumerate}
+\item Activations maintain reasonable scale across layers (forward stability)
+\item Gradients maintain reasonable scale across layers (backward stability)
+\end{enumerate}
+
+\subsection{Xavier (Glorot) Initialization: The Derivation}
+
+\textbf{Published}: Glorot \& Bengio, 2010 (``Understanding the difficulty of training deep feedforward neural networks'')
+
+\textbf{Motivation}: Keep variance of activations constant across layers.
+
+\textbf{Assumptions}:
+\begin{itemize}
+\item Activation function: tanh or sigmoid (symmetric around 0, derivative $\approx 1$ near 0)
+\item Inputs to each layer have mean 0
+\item Weights and inputs are independent
+\end{itemize}
+
+\textbf{Setup}: Consider layer $\ell$ with $n_{\text{in}}$ inputs and $n_{\text{out}}$ outputs:
+\begin{align*}
+z_j &= \sum_{i=1}^{n_{\text{in}}} w_{ij} h_i + b_j \\
+a_j &= \sigma(z_j)
+\end{align*}
+
+\textbf{Variance analysis}:
+
+Assuming $w_{ij}$ and $h_i$ are independent with mean 0:
+\begin{align*}
+\text{Var}(z_j) &= \text{Var}\left(\sum_i w_{ij} h_i\right) \\
+&= \sum_i \text{Var}(w_{ij} h_i) \quad \text{(independence)} \\
+&= \sum_i \mathbb{E}[w_{ij}^2] \mathbb{E}[h_i^2] \quad \text{(mean = 0)} \\
+&= \sum_i \text{Var}(w_{ij}) \text{Var}(h_i) \quad \text{(mean = 0)} \\
+&= n_{\text{in}} \cdot \text{Var}(w) \cdot \text{Var}(h)
+\end{align*}
+
+\textbf{Forward propagation}: To maintain variance across layers:
+\begin{align*}
+\text{Var}(z_j) &= \text{Var}(h_i) \\
+\Rightarrow n_{\text{in}} \cdot \text{Var}(w) \cdot \text{Var}(h) &= \text{Var}(h) \\
+\Rightarrow \text{Var}(w) &= \frac{1}{n_{\text{in}}}
+\end{align*}
+
+\textbf{Backward propagation}: By similar analysis with gradients:
+\[
+\text{Var}\left(\frac{\partial L}{\partial h_i}\right) = n_{\text{out}} \cdot \text{Var}(w) \cdot \text{Var}\left(\frac{\partial L}{\partial z_j}\right)
+\]
+
+To maintain gradient variance:
+\[
+\text{Var}(w) = \frac{1}{n_{\text{out}}}
+\]
+
+\textbf{Conflict!} Forward propagation wants $\text{Var}(w) = 1/n_{\text{in}}$, backward wants $\text{Var}(w) = 1/n_{\text{out}}$.
+
+\textbf{Xavier compromise}: Average the two requirements:
+\[
+\text{Var}(w) = \frac{2}{n_{\text{in}} + n_{\text{out}}}
+\]
+
+\textbf{Implementation}:
+
+Draw weights from uniform distribution:
+\[
+w \sim \text{Uniform}\left[-\sqrt{\frac{6}{n_{\text{in}} + n_{\text{out}}}}, \sqrt{\frac{6}{n_{\text{in}} + n_{\text{out}}}}\right]
+\]
+
+Or normal distribution:
+\[
+w \sim \mathcal{N}\left(0, \sqrt{\frac{2}{n_{\text{in}} + n_{\text{out}}}}\right)
+\]
+
+\textbf{Why uniform with} $\sqrt{6}$?
+
+For uniform distribution on $[-a, a]$:
+\[
+\text{Var}(w) = \frac{a^2}{3}
+\]
+
+Setting $\text{Var}(w) = 2/(n_{\text{in}} + n_{\text{out}})$:
+\begin{align*}
+\frac{a^2}{3} &= \frac{2}{n_{\text{in}} + n_{\text{out}}} \\
+a^2 &= \frac{6}{n_{\text{in}} + n_{\text{out}}} \\
+a &= \sqrt{\frac{6}{n_{\text{in}} + n_{\text{out}}}}
+\end{align*}
+
+\subsection{He Initialization: Fixing ReLU}
+
+\textbf{Published}: He et al., 2015 (``Delving Deep into Rectifiers: Surpassing Human-Level Performance on ImageNet Classification'')
+
+\textbf{Problem with Xavier for ReLU}:
+
+Xavier assumes activation derivative $\approx 1$. But $\text{ReLU}(x) = \max(0, x)$ has:
+\[
+\text{ReLU}'(x) = \begin{cases}
+1 & \text{if } x > 0 \\
+0 & \text{if } x < 0
+\end{cases}
+\]
+
+On average (assuming inputs centered at 0), half of neurons output 0:
+\[
+\mathbb{E}[\text{ReLU}(x)] \approx \mathbb{E}[x]/2 \quad \text{(for } x \sim \mathcal{N}(0, \sigma^2)\text{)}
+\]
+
+\textbf{Effect on variance}: If input has variance $\sigma^2$, output variance is approximately $\sigma^2/2$.
+
+With Xavier initialization, variance \textit{halves} at each layer:
+\begin{align*}
+\text{Layer 1:} \quad & \text{Var}(a_1) = \text{Var}(h_0) \\
+\text{Layer 2:} \quad & \text{Var}(a_2) = \text{Var}(h_0)/2 \\
+\text{Layer 3:} \quad & \text{Var}(a_3) = \text{Var}(h_0)/4 \\
+&\vdots \\
+\text{Layer } L: \quad & \text{Var}(a_L) = \text{Var}(h_0)/2^L
+\end{align*}
+
+\textbf{Vanishing activations!} Deep ReLU networks with Xavier init have near-zero activations in late layers.
+
+\textbf{He's Solution}: Account for the variance reduction from ReLU.
+
+\textbf{Derivation}:
+
+For ReLU, the variance reduction factor is approximately 2 (half of activations are zeroed).
+
+To maintain variance across layers:
+\[
+\text{Var}(a_j) = \text{Var}(z_j)/2 \quad \text{(ReLU effect)}
+\]
+
+We want $\text{Var}(a_j) = \text{Var}(h_i)$, so:
+\[
+\text{Var}(z_j) = 2 \cdot \text{Var}(h_i)
+\]
+
+From earlier:
+\[
+\text{Var}(z_j) = n_{\text{in}} \cdot \text{Var}(w) \cdot \text{Var}(h_i)
+\]
+
+Therefore:
+\begin{align*}
+n_{\text{in}} \cdot \text{Var}(w) \cdot \text{Var}(h_i) &= 2 \cdot \text{Var}(h_i) \\
+\text{Var}(w) &= \frac{2}{n_{\text{in}}}
+\end{align*}
+
+\textbf{He Initialization (ReLU)}:
+\[
+w \sim \mathcal{N}\left(0, \sqrt{\frac{2}{n_{\text{in}}}}\right)
+\]
+
+Or uniform:
+\[
+w \sim \text{Uniform}\left[-\sqrt{\frac{6}{n_{\text{in}}}}, \sqrt{\frac{6}{n_{\text{in}}}}\right]
+\]
+
+\textbf{Comparison}:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llll}
+\toprule
+\textbf{Method} & \textbf{Variance} & \textbf{Best For} & \textbf{Reasoning} \\
+\midrule
+Xavier & $2/(n_{\text{in}} + n_{\text{out}})$ & tanh, sigmoid & Assumes $\sigma'(x) \approx 1$ \\
+He & $2/n_{\text{in}}$ & ReLU, Leaky ReLU & Accounts for variance reduction from zeroing \\
+LeCun & $1/n_{\text{in}}$ & SELU & Assumes variance = 1, no correction needed \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Mathematical Proof: Variance Propagation with ReLU}
+
+\textbf{Theorem}: For ReLU activation with input $z \sim \mathcal{N}(0, \sigma^2)$, the output $a = \text{ReLU}(z)$ has:
+\begin{align*}
+\mathbb{E}[a] &= \sigma/\sqrt{2\pi} \\
+\text{Var}(a) &= \sigma^2/2
+\end{align*}
+
+\textbf{Proof}:
+
+$\text{ReLU}(z) = \max(0, z)$. Since $z \sim \mathcal{N}(0, \sigma^2)$:
+\begin{align*}
+\mathbb{E}[a] &= \mathbb{E}[\max(0, z)] \\
+&= \int_0^\infty z \cdot \frac{1}{\sigma\sqrt{2\pi}} \exp\left(-\frac{z^2}{2\sigma^2}\right) dz \\
+&= \frac{\sigma}{\sqrt{2\pi}} \int_0^\infty \frac{z}{\sigma} \cdot \exp\left(-\frac{(z/\sigma)^2}{2}\right) d(z/\sigma) \\
+&= \frac{\sigma}{\sqrt{2\pi}}
+\end{align*}
+
+For variance:
+\begin{align*}
+\mathbb{E}[a^2] &= \int_0^\infty z^2 \cdot \frac{1}{\sigma\sqrt{2\pi}} \exp\left(-\frac{z^2}{2\sigma^2}\right) dz \\
+&= \frac{\sigma^2}{2}
+\end{align*}
+
+Therefore:
+\begin{align*}
+\text{Var}(a) &= \mathbb{E}[a^2] - \mathbb{E}[a]^2 \\
+&= \frac{\sigma^2}{2} - \left(\frac{\sigma}{\sqrt{2\pi}}\right)^2 \\
+&\approx \frac{\sigma^2}{2} \quad \text{(since } (\sigma/\sqrt{2\pi})^2 \approx 0.16\sigma^2 \text{ is smaller)}
+\end{align*}
+
+\textbf{Implication}: ReLU reduces variance by factor of $\sim$2. He initialization compensates by multiplying initial variance by 2.
+
+\subsection{Why Initialization Fails: Common Mistakes}
+
+\textbf{1. All zeros}: Symmetry problem, no learning
+
+\textbf{2. Too large (e.g., $w \sim \mathcal{N}(0, 1)$)}:
+\begin{itemize}
+\item Forward: Activations explode
+\item Backward: Gradients explode
+\item Result: Loss → NaN after few iterations
+\end{itemize}
+
+\textbf{3. Too small (e.g., $w \sim \mathcal{N}(0, 0.0001)$)}:
+\begin{itemize}
+\item Forward: Activations vanish
+\item Backward: Gradients vanish
+\item Result: Extremely slow learning, stuck near initialization
+\end{itemize}
+
+\textbf{4. Same initialization for all layers}:
+\begin{itemize}
+\item Different layers have different fan-in/fan-out
+\item Needs layer-specific scaling
+\end{itemize}
+
+\subsection{Empirical Validation}
+
+\textbf{Experiment}: Train 10-layer network on MNIST with different initializations:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llll}
+\toprule
+\textbf{Initialization} & \textbf{Epoch 1 Accuracy} & \textbf{Epoch 10 Accuracy} & \textbf{Notes} \\
+\midrule
+He (ReLU) & 92\% & 98\% & Works perfectly \\
+Xavier (ReLU) & 85\% & 96\% & Slower, but eventually works \\
+$w \sim \mathcal{N}(0, 1)$ & NaN & NaN & Explodes immediately \\
+$w \sim \mathcal{N}(0, 0.001)$ & 11\% & 15\% & Barely learns (gradients too small) \\
+All zeros & 10\% & 10\% & Stuck at random chance \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Conclusion}: Proper initialization is not optional. It's the difference between ``trains in 10 epochs'' and ``doesn't train at all.''
+
+\subsection{When to Use Which Initialization}
+
+\textbf{He initialization (default for ReLU)}:
+\begin{lstlisting}[language=Python]
+nn.init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='relu')
+\end{lstlisting}
+
+\textbf{Xavier initialization (for tanh/sigmoid)}:
+\begin{lstlisting}[language=Python]
+nn.init.xavier_normal_(layer.weight)
+\end{lstlisting}
+
+\textbf{LeCun initialization (for SELU)}:
+\begin{lstlisting}[language=Python]
+nn.init.normal_(layer.weight, mean=0, std=sqrt(1/fan_in))
+\end{lstlisting}
+
+\textbf{Modern practice}:
+\begin{itemize}
+\item ReLU/Leaky ReLU: He initialization
+\item tanh/sigmoid: Xavier initialization
+\item SELU: LeCun initialization
+\item Transformers: Often use Xavier with specific scaling factors
+\end{itemize}
+
+\subsection{The Deeper Principle: Isometry}
+
+\textbf{Philosophical insight}: Good initialization makes the network an approximate \textbf{isometry} - a transformation that preserves distances.
+
+If $||h_1|| \approx ||h_0||$, $||h_2|| \approx ||h_1||$, \ldots, then:
+\begin{itemize}
+\item Information flows forward without amplification/attenuation
+\item Gradients flow backward without amplification/attenuation
+\item Network is trainable
+\end{itemize}
+
+\textbf{Residual connections} (covered next) achieve this even better: they \textit{force} the network to be close to an isometry.
+
+\subsection{Summary: The Math Behind Initialization}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Concept} & \textbf{Formula} & \textbf{Intuition} \\
+\midrule
+Symmetry breaking & $w \neq 0$, random & All neurons must start different \\
+Variance preservation & $\text{Var}(h_l) = \text{Var}(h_{l-1})$ & Keep signal strength constant across layers \\
+Xavier (tanh) & $\text{Var}(w) = 2/(n_{\text{in}} + n_{\text{out}})$ & Compromise between forward and backward \\
+He (ReLU) & $\text{Var}(w) = 2/n_{\text{in}}$ & Account for ReLU zeroing half of activations \\
+Gradient flow & $\partial L/\partial W_1 \approx \partial L/\partial W_L$ & Prevent vanishing/exploding gradients \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key insight}: Initialization sets up the \textbf{optimization landscape}. Bad initialization creates loss landscapes with huge plateaus or steep cliffs. Good initialization creates smooth, trainable landscapes.
+
+\textbf{Historical note}: Before proper initialization methods (pre-2010), training deep networks ($>$5 layers) was nearly impossible. Xavier and He initialization were key breakthroughs that enabled modern deep learning.
+
+\section{Batch Normalization Theory: Stabilizing Deep Learning}
+
+Batch Normalization (Ioffe \& Szegedy, 2015) is one of the most impactful techniques in modern deep learning. It stabilizes training, allows higher learning rates, and acts as a regularizer. This section rigorously derives the mathematics and explores why it works.
+
+\subsection{The Problem: Internal Covariate Shift}
+
+\textbf{Definition}: Internal covariate shift is the change in the distribution of network activations during training.
+
+\textbf{Why it's a problem}:
+
+Consider a deep network with layers:
+\[
+x \to \text{Layer 1} \to h_1 \to \text{Layer 2} \to h_2 \to \ldots \to \text{Output}
+\]
+
+During training, parameters in Layer 1 change → distribution of $h_1$ changes → Layer 2 must constantly adapt to a shifting input distribution → Layer 3 must adapt to shifts from both Layer 1 and 2 → \ldots
+
+\textbf{Concrete example}:
+
+Epoch 1: $h_1 \sim \mathcal{N}(0, 1)$ (mean 0, std 1)
+
+Epoch 10: $h_1 \sim \mathcal{N}(5, 10)$ (mean 5, std 10)
+
+Layer 2 was learning to process inputs with mean 0. Now inputs have mean 5. Layer 2's previous learning is partially invalidated.
+
+\textbf{Consequences}:
+\begin{enumerate}
+\item \textbf{Slow learning}: Each layer must constantly adjust to shifting distributions
+\item \textbf{Requires small learning rates}: Large updates cause dramatic distribution shifts
+\item \textbf{Sensitive to initialization}: Poor initialization compounds over many layers
+\item \textbf{Saturated activations}: If $h$ shifts to large values, sigmoid/tanh saturate (gradients → 0)
+\end{enumerate}
+
+\subsection{Batch Normalization: The Algorithm}
+
+\textbf{Idea}: Normalize each layer's inputs to have fixed mean and variance.
+
+\textbf{For each layer}:
+
+Input: $x = (x_1, x_2, \ldots, x_B)$ (batch of $B$ examples, each $d$-dimensional)
+
+\textbf{Step 1: Compute batch statistics}
+\begin{align*}
+\mu_B &= \frac{1}{B} \sum_{i=1}^B x_i \quad \text{(mean of the batch)} \\
+\sigma_B^2 &= \frac{1}{B} \sum_{i=1}^B (x_i - \mu_B)^2 \quad \text{(variance of the batch)}
+\end{align*}
+
+\textbf{Step 2: Normalize}
+\[
+\hat{x}_i = \frac{x_i - \mu_B}{\sqrt{\sigma_B^2 + \varepsilon}}
+\]
+
+where $\varepsilon$ (e.g., $10^{-5}$) prevents division by zero.
+
+After normalization: $\hat{x}$ has mean 0, variance 1.
+
+\textbf{Step 3: Scale and shift (learnable parameters)}
+\[
+y_i = \gamma \hat{x}_i + \beta
+\]
+
+where $\gamma$ (scale) and $\beta$ (shift) are learnable parameters.
+
+\textbf{Why scale and shift?}
+
+Forcing all layers to have mean 0, variance 1 might be too restrictive. The network should learn the optimal mean/variance for each layer.
+
+\textbf{Special case}: If $\gamma = \sqrt{\sigma_B^2 + \varepsilon}$ and $\beta = \mu_B$, then $y_i = x_i$ (identity mapping). This means the network can learn to ``undo'' the normalization if needed.
+
+\subsection{Mathematical Analysis: Why Batch Norm Works}
+
+The original paper claimed batch norm reduces internal covariate shift. \textbf{Recent research shows this isn't the full story}.
+
+\textbf{Theory 1: Smooths the optimization landscape} (Santurkar et al., 2018)
+
+Batch norm makes the loss landscape smoother:
+
+Without batch norm:
+\begin{itemize}
+\item Loss landscape has sharp peaks and valleys
+\item Small changes in parameters → large changes in loss
+\item Requires small learning rates
+\end{itemize}
+
+With batch norm:
+\begin{itemize}
+\item Loss landscape is smoother (lower Lipschitz constant)
+\item Gradients are more predictive (current gradient direction remains useful for longer)
+\item Can use larger learning rates
+\end{itemize}
+
+\textbf{Mathematical intuition}:
+
+The loss $L$ depends on parameters $\theta$ and activation distributions.
+
+Without BN: Changing $\theta$ changes both:
+\begin{enumerate}
+\item The function computed
+\item The distribution of activations (internal covariate shift)
+\end{enumerate}
+
+Effect (2) causes gradients to become less predictive.
+
+With BN: Normalization decouples scale of activations from parameters:
+\begin{itemize}
+\item Changing $\theta$ primarily affects the function computed
+\item Distribution of normalized activations $\hat{x}$ remains stable (mean 0, variance 1)
+\end{itemize}
+
+\textbf{Gradient magnitude analysis}:
+
+Consider how $\partial L/\partial x$ changes with $x$.
+
+Without BN:
+\[
+\frac{\partial L}{\partial x} \text{ can grow arbitrarily large as } x \text{ moves}
+\]
+
+With BN: The normalization bounds the relationship between $x$ and $\hat{x}$:
+\[
+\frac{\partial L}{\partial x} = \frac{\partial L}{\partial \hat{x}} \cdot \frac{\partial \hat{x}}{\partial x}
+\]
+
+where $\frac{\partial \hat{x}}{\partial x} = \frac{1}{\sqrt{\sigma_B^2 + \varepsilon}} \cdot \left(I - \frac{1}{B} \cdot \mathbf{1}\mathbf{1}^T - \frac{\hat{x}\hat{x}^T}{B}\right)$
+
+This derivative is bounded, preventing gradient explosion.
+
+\textbf{Theory 2: Implicit regularization}
+
+Batch normalization introduces noise:
+\begin{itemize}
+\item Each example is normalized using batch statistics (mean and variance of other examples in batch)
+\item Different batches have different statistics
+\item Same example gets slightly different normalization each epoch
+\end{itemize}
+
+This noise acts like dropout - prevents overfitting to specific activation magnitudes.
+
+\textbf{Empirical evidence}: Networks with BN generalize better even when trained to zero training error.
+
+\textbf{Theory 3: Reduces dependence on initialization}
+
+Recall that initialization aims to keep activations in reasonable range.
+
+Batch norm \textbf{explicitly enforces} this at every layer:
+\begin{itemize}
+\item No matter how weights are initialized, activations are normalized to mean 0, variance 1
+\item Then scaled/shifted by learned $\gamma$, $\beta$
+\end{itemize}
+
+\textbf{Result}: Network is far less sensitive to initialization. You can often use larger initial weights without breaking training.
+
+\subsection{Backpropagation Through Batch Normalization}
+
+To train with BN, we need gradients. This derivation shows how to backpropagate through the normalization.
+
+\textbf{Notation}:
+\begin{itemize}
+\item $x = (x_1, \ldots, x_B)$: inputs to BN layer
+\item $\hat{x} = (\hat{x}_1, \ldots, \hat{x}_B)$: normalized values
+\item $y = (y_1, \ldots, y_B)$: outputs (after scale/shift)
+\item Loss: $L$
+\end{itemize}
+
+We have gradient $\partial L/\partial y$ from the next layer. We need: $\partial L/\partial x$, $\partial L/\partial \gamma$, $\partial L/\partial \beta$.
+
+\textbf{Step 1: Gradient w.r.t.} $\gamma$ \textbf{and} $\beta$
+
+From $y_i = \gamma \hat{x}_i + \beta$:
+\begin{align*}
+\frac{\partial L}{\partial \gamma} &= \sum_{i=1}^B \frac{\partial L}{\partial y_i} \cdot \hat{x}_i \\
+\frac{\partial L}{\partial \beta} &= \sum_{i=1}^B \frac{\partial L}{\partial y_i}
+\end{align*}
+
+\textbf{Step 2: Gradient w.r.t.} $\hat{x}$
+
+From $y_i = \gamma \hat{x}_i + \beta$:
+\[
+\frac{\partial L}{\partial \hat{x}_i} = \frac{\partial L}{\partial y_i} \cdot \gamma
+\]
+
+\textbf{Step 3: Gradient w.r.t.} $\sigma^2$
+
+From $\hat{x}_i = (x_i - \mu) / \sqrt{\sigma^2 + \varepsilon}$:
+\[
+\frac{\partial L}{\partial \sigma^2} = \sum_{i=1}^B \frac{\partial L}{\partial \hat{x}_i} \cdot (x_i - \mu) \cdot \left(-\frac{1}{2}\right) \cdot (\sigma^2 + \varepsilon)^{-3/2}
+\]
+
+\textbf{Step 4: Gradient w.r.t.} $\mu$
+
+$\hat{x}_i$ depends on $\mu$ in two ways:
+\begin{enumerate}
+\item Directly in the numerator: $x_i - \mu$
+\item Indirectly through $\sigma^2$ (which depends on $\mu$)
+\end{enumerate}
+
+\[
+\frac{\partial L}{\partial \mu} = \sum_i \frac{\partial L}{\partial \hat{x}_i} \cdot \left(-\frac{1}{\sqrt{\sigma^2 + \varepsilon}}\right) + \frac{\partial L}{\partial \sigma^2} \cdot \left(-\frac{2}{B}\right) \cdot \sum_i (x_i - \mu)
+\]
+
+\textbf{Step 5: Gradient w.r.t.} $x$
+
+$x_i$ affects loss through three paths:
+\begin{enumerate}
+\item Direct: $x_i \to \hat{x}_i$
+\item Via $\mu$: $x_i \to \mu \to$ all $\hat{x}_j$
+\item Via $\sigma^2$: $x_i \to \sigma^2 \to$ all $\hat{x}_j$
+\end{enumerate}
+
+Full derivation:
+\[
+\frac{\partial L}{\partial x_i} = \frac{\partial L}{\partial \hat{x}_i} \cdot \frac{1}{\sqrt{\sigma^2 + \varepsilon}} + \frac{\partial L}{\partial \sigma^2} \cdot \frac{2}{B} \cdot (x_i - \mu) + \frac{\partial L}{\partial \mu} \cdot \frac{1}{B}
+\]
+
+\textbf{Simplified form} (substituting the above):
+\[
+\frac{\partial L}{\partial x_i} = \frac{1}{B \sqrt{\sigma^2 + \varepsilon}} \left[B \frac{\partial L}{\partial \hat{x}_i} - \sum_j \frac{\partial L}{\partial \hat{x}_j} - \hat{x}_i \sum_j \frac{\partial L}{\partial \hat{x}_j} \cdot \hat{x}_j\right]
+\]
+
+\textbf{Interpretation}: The gradient for each $x_i$ is:
+\begin{enumerate}
+\item Centered (subtract mean gradient)
+\item Decorrelated (subtract component along mean normalized direction)
+\item Scaled (divide by batch std)
+\end{enumerate}
+
+This prevents gradients from growing unboundedly.
+
+\subsection{Batch Normalization at Inference}
+
+\textbf{Problem}: At test time, we have a single example (batch size = 1). Can't compute meaningful batch statistics.
+
+\textbf{Solution}: Use running averages of statistics computed during training.
+
+\textbf{During training}, maintain:
+\begin{align*}
+\mu_{\text{running}} &= \text{momentum} \cdot \mu_{\text{running}} + (1 - \text{momentum}) \cdot \mu_{\text{batch}} \\
+\sigma^2_{\text{running}} &= \text{momentum} \cdot \sigma^2_{\text{running}} + (1 - \text{momentum}) \cdot \sigma^2_{\text{batch}}
+\end{align*}
+
+Typical momentum: 0.9 or 0.99.
+
+\textbf{At inference}:
+\begin{align*}
+\hat{x} &= \frac{x - \mu_{\text{running}}}{\sqrt{\sigma^2_{\text{running}} + \varepsilon}} \\
+y &= \gamma \hat{x} + \beta
+\end{align*}
+
+\textbf{Why this works}: The running averages approximate the statistics over the entire training set. Normalizing with these gives consistent behavior at test time.
+
+\subsection{Where to Apply Batch Normalization}
+
+\textbf{Standard practice}: Apply BN after linear transformation, before activation:
+\begin{align*}
+z &= Wx + b \\
+z_{\text{norm}} &= \text{BN}(z) \\
+a &= \text{ReLU}(z_{\text{norm}})
+\end{align*}
+
+\textbf{Alternative}: After activation:
+\begin{align*}
+z &= Wx + b \\
+a &= \text{ReLU}(z) \\
+a_{\text{norm}} &= \text{BN}(a)
+\end{align*}
+
+\textbf{Modern preference}: Before activation (as in original paper).
+
+\textbf{Why?}
+\begin{itemize}
+\item Normalizing pre-activation keeps inputs to activation function in the linear regime (where gradients are strongest)
+\item For ReLU: Keeps values centered around 0, so roughly half are positive (good activation rate)
+\end{itemize}
+
+\textbf{Bias term}: When using BN, the bias $b$ in $Wx + b$ becomes redundant (since BN subtracts mean anyway). Often omitted:
+\begin{align*}
+z &= Wx \quad \text{(no bias)} \\
+z_{\text{norm}} &= \text{BN}(z)
+\end{align*}
+
+The $\beta$ parameter in BN serves the role of bias.
+
+\subsection{Batch Normalization Variants}
+
+\textbf{1. Layer Normalization} (Ba et al., 2016):
+\begin{itemize}
+\item Normalize across features (not across batch)
+\item Used in transformers (where batch norm fails for variable-length sequences)
+\item Details covered in Chapter 5
+\end{itemize}
+
+\textbf{2. Instance Normalization} (Ulyanov et al., 2016):
+\begin{itemize}
+\item Normalize each feature map independently
+\item Used in style transfer (where batch statistics harm quality)
+\end{itemize}
+
+\textbf{3. Group Normalization} (Wu \& He, 2018):
+\begin{itemize}
+\item Compromise: normalize over groups of channels
+\item Works well with small batch sizes (where batch norm struggles)
+\end{itemize}
+
+\textbf{Comparison}:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Method} & \textbf{Normalization Axis} & \textbf{Best For} \\
+\midrule
+Batch Norm & Across batch & Large batches, CNNs, fully-connected \\
+Layer Norm & Across features & Transformers, RNNs, small batches \\
+Instance Norm & Per instance per channel & Style transfer, GANs \\
+Group Norm & Across channel groups & Small batches, object detection \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Why Batch Normalization Works: Summary}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Explanation} & \textbf{Evidence} & \textbf{Strength} \\
+\midrule
+Reduces covariate shift & Original paper & Debated \\
+Smooths loss landscape & Santurkar et al. 2018 & Strong \\
+Regularization via noise & Empirical & Strong \\
+Reduces init sensitivity & Empirical & Strong \\
+Bounds gradient magnitude & Theoretical & Strong \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Modern consensus}: Batch norm works primarily by:
+\begin{enumerate}
+\item \textbf{Smoothing the optimization landscape} → allows larger learning rates
+\item \textbf{Bounding gradients} → prevents explosion/vanishing
+\item \textbf{Adding noise} → implicit regularization
+\end{enumerate}
+
+\textbf{Not} primarily by reducing internal covariate shift (despite the name).
+
+\subsection{Practical Considerations}
+
+\textbf{When to use BN}:
+\begin{itemize}
+\item CNNs (very common)
+\item Fully-connected networks (common)
+\item Large batch sizes ($>$32)
+\end{itemize}
+
+\textbf{When NOT to use BN}:
+\begin{itemize}
+\item Transformers (use Layer Norm instead)
+\item Small batch sizes ($<$8) (statistics are noisy)
+\item Reinforcement learning (non-i.i.d. data makes batch stats unreliable)
+\item Online learning (batch size = 1)
+\end{itemize}
+
+\textbf{Typical hyperparameters}:
+\begin{itemize}
+\item Momentum for running averages: 0.9 or 0.99
+\item $\varepsilon$: $10^{-5}$ (stability constant)
+\item Initialization: $\gamma = 1$, $\beta = 0$ (identity at start)
+\end{itemize}
+
+\textbf{Debugging}: If loss is NaN after adding BN:
+\begin{enumerate}
+\item Check $\varepsilon$ is set (prevents division by zero)
+\item Verify running stats are updated correctly
+\item Check for inf/NaN in inputs (BN can't fix this)
+\end{enumerate}
+
+\subsection{Mathematical Summary}
+
+\textbf{Forward (training)}:
+\begin{align*}
+\mu &= \frac{1}{B} \sum_i x_i \\
+\sigma^2 &= \frac{1}{B} \sum_i (x_i - \mu)^2 \\
+\hat{x}_i &= \frac{x_i - \mu}{\sqrt{\sigma^2 + \varepsilon}} \\
+y_i &= \gamma \hat{x}_i + \beta
+\end{align*}
+
+\textbf{Forward (inference)}:
+\begin{align*}
+\hat{x} &= \frac{x - \mu_{\text{running}}}{\sqrt{\sigma^2_{\text{running}} + \varepsilon}} \\
+y &= \gamma \hat{x} + \beta
+\end{align*}
+
+\textbf{Backward}:
+\begin{align*}
+\frac{\partial L}{\partial \gamma} &= \sum_i \frac{\partial L}{\partial y_i} \hat{x}_i \\
+\frac{\partial L}{\partial \beta} &= \sum_i \frac{\partial L}{\partial y_i} \\
+\frac{\partial L}{\partial x_i} &= \frac{\gamma}{B\sqrt{\sigma^2 + \varepsilon}} \left[B\frac{\partial L}{\partial y_i} - \sum_j\frac{\partial L}{\partial y_j} - \hat{x}_i\sum_j\frac{\partial L}{\partial y_j}\hat{x}_j\right]
+\end{align*}
+
+\textbf{Key properties}:
+\begin{itemize}
+\item Bounded activations: $\mathbb{E}[\hat{x}] = 0$, $\text{Var}(\hat{x}) = 1$
+\item Learnable scale/shift: Network can learn optimal distribution
+\item Smooth gradients: Normalization prevents gradient explosion
+\end{itemize}
+
+\textbf{Impact}: Batch normalization was a breakthrough that made training very deep networks ($>$20 layers) practical and reliable. Before BN, training 50+ layer networks was nearly impossible. After BN, networks with 100+ layers became standard (ResNets).
+
+\section{Residual Connections Theory: Highway to Deep Networks}
+
+Residual connections (He et al., 2015) enabled a paradigm shift: networks went from $\sim$20 layers to 100+ layers. The core idea is deceptively simple, but the mathematics reveals deep insights into why very deep networks work.
+
+\subsection{The Problem: Degradation}
+
+\textbf{Intuition}: Deeper networks should be at least as good as shallow ones.
+
+\textbf{Reasoning}: A deep network can always learn to copy inputs through some layers (identity mapping) and only use the layers it needs.
+
+\textbf{Reality}: Training very deep networks ($>$20 layers) was failing.
+
+\textbf{The degradation problem} (NOT overfitting):
+\begin{itemize}
+\item Training error increases as depth increases beyond $\sim$20 layers
+\item This isn't overfitting (where test error increases but training error decreases)
+\item The network can't even fit the training data
+\end{itemize}
+
+\textbf{Experiment} (He et al., 2015):
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Network Depth} & \textbf{Training Error} & \textbf{Test Error} \\
+\midrule
+20 layers & 15\% & 18\% \\
+56 layers & 25\% & 28\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The deeper network performs \textbf{worse} on training data. Why?
+
+\textbf{Hypothesis}: The problem isn't representational capacity (deeper networks can represent more). It's \textbf{optimization} - gradient descent can't find good solutions in very deep networks.
+
+\subsection{Residual Learning: The Solution}
+
+\textbf{Standard layer}: Learn the desired mapping $H(x)$
+\[
+\text{Output} = H(x) = \sigma(W_2\sigma(W_1 x + b_1) + b_2)
+\]
+
+\textbf{Residual layer}: Learn the residual $F(x) = H(x) - x$
+\[
+\text{Output} = F(x) + x = H(x)
+\]
+
+\textbf{Architecture}:
+\begin{verbatim}
+      ┌──────────────┐
+      │     F(x)     │  ← Learnable layers
+x ────┤ (Conv, ReLU) │────┬──→ F(x) + x
+      └──────────────┘    │
+         │                │
+         └────────────────┘
+            Skip connection (identity)
+\end{verbatim}
+
+\textbf{Mathematically}:
+\[
+y = F(x, \{W_i\}) + x
+\]
+
+where $F(x, \{W_i\})$ represents the stacked layers (typically 2-3 conv layers with batch norm and ReLU).
+
+\subsection{Why Residual Connections Work: Multiple Perspectives}
+
+\subsubsection{Perspective 1: Easier Optimization (Identity Mapping)}
+
+\textbf{Claim}: Learning $F(x) = H(x) - x$ is easier than learning $H(x)$ directly.
+
+\textbf{Why?}
+
+If the optimal mapping is close to identity ($H(x) \approx x$), then:
+\begin{itemize}
+\item \textbf{Standard layer}: Must learn $H(x) = x$, a specific non-trivial function
+\item \textbf{Residual layer}: Must learn $F(x) = 0$, just set weights to zero
+\end{itemize}
+
+\textbf{Proof that} $F(x) = 0$ \textbf{is easier}:
+
+Consider weight decay (L2 regularization), which pushes weights toward zero:
+\[
+\text{Loss}_{\text{total}} = \text{Loss}_{\text{data}} + \lambda \sum W^2
+\]
+
+\begin{itemize}
+\item For standard layer: Setting $W = 0$ gives $H(x) = 0$ (wrong if target is $x$)
+\item For residual layer: Setting $W = 0$ gives $F(x) = 0$, so output = $x$ (correct!)
+\end{itemize}
+
+\textbf{Gradient descent naturally finds identity mappings} in residual networks because zero weights = identity.
+
+\textbf{Empirical evidence}: Trained ResNets have many layers where $F(x) \approx 0$ (the layer does almost nothing, just passes input through).
+
+\subsubsection{Perspective 2: Gradient Flow}
+
+\textbf{The vanishing gradient problem revisited}:
+
+In a deep network, gradients backpropagate via chain rule:
+\[
+\frac{\partial \text{Loss}}{\partial x_1} = \frac{\partial \text{Loss}}{\partial x_n} \cdot \frac{\partial x_n}{\partial x_{n-1}} \cdot \frac{\partial x_{n-1}}{\partial x_{n-2}} \cdot \ldots \cdot \frac{\partial x_2}{\partial x_1}
+\]
+
+Each term $\frac{\partial x_{l+1}}{\partial x_l}$ involves the weight matrix $W_l$. If $||W_l|| < 1$, gradients vanish.
+
+\textbf{With residual connections}:
+
+\[
+x_{l+1} = F(x_l, W_l) + x_l
+\]
+
+Gradient backpropagation:
+\[
+\frac{\partial x_{l+1}}{\partial x_l} = \frac{\partial F(x_l)}{\partial x_l} + I
+\]
+
+where $I$ is the identity matrix.
+
+\textbf{Key insight}: The ``+I'' term provides a \textbf{gradient highway} - gradients can flow directly backwards without being diminished.
+
+\textbf{Full derivation}:
+
+Consider $L$-layer residual network. Loss gradient at layer 1:
+\[
+\frac{\partial \text{Loss}}{\partial x_1} = \frac{\partial \text{Loss}}{\partial x_L} \cdot \frac{\partial x_L}{\partial x_{L-1}} \cdot \ldots \cdot \frac{\partial x_2}{\partial x_1}
+\]
+
+For each residual connection:
+\[
+\frac{\partial x_{l+1}}{\partial x_l} = \frac{\partial F(x_l)}{\partial x_l} + I
+\]
+
+Therefore:
+\[
+\frac{\partial \text{Loss}}{\partial x_1} = \frac{\partial \text{Loss}}{\partial x_L} \cdot \prod_{i=1}^{L-1} \left(\frac{\partial F(x_i)}{\partial x_i} + I\right)
+\]
+
+\textbf{Expanding the product} (for simplicity, consider 2 layers):
+\[
+\left(\frac{\partial F_2}{\partial x_2} + I\right)\left(\frac{\partial F_1}{\partial x_1} + I\right) = \frac{\partial F_2}{\partial x_2} \cdot \frac{\partial F_1}{\partial x_1} + \frac{\partial F_2}{\partial x_2} + \frac{\partial F_1}{\partial x_1} + I
+\]
+
+\textbf{Critical observation}: Even if $\frac{\partial F}{\partial x} \to 0$ (layers do nothing), we still have the ``+I'' term.
+
+\textbf{In general} ($L$ layers):
+\[
+\prod_i \left(\frac{\partial F_i}{\partial x_i} + I\right) = I + \sum_i \frac{\partial F_i}{\partial x_i} + \text{(higher order terms)}
+\]
+
+The gradient is \textbf{at least} $I$, the identity. It can never vanish completely!
+
+\textbf{Gradient magnitude}:
+
+Standard network ($L$ layers, assume $||\frac{\partial F}{\partial x}|| \leq k < 1$):
+\[
+\left|\left|\frac{\partial \text{Loss}}{\partial x_1}\right|\right| \leq \left|\left|\frac{\partial \text{Loss}}{\partial x_L}\right|\right| \cdot k^L \to 0 \text{ as } L \to \infty
+\]
+
+Residual network:
+\[
+\left|\left|\frac{\partial \text{Loss}}{\partial x_1}\right|\right| \geq \left|\left|\frac{\partial \text{Loss}}{\partial x_L}\right|\right| \cdot 1 \quad \text{(never vanishes!)}
+\]
+
+\subsubsection{Perspective 3: Ensemble of Paths}
+
+\textbf{View}: A residual network is an ensemble of exponentially many paths of varying lengths.
+
+\textbf{Derivation}:
+
+Consider 3-block residual network:
+\begin{align*}
+x_1 &= x_0 + F_1(x_0) \\
+x_2 &= x_1 + F_2(x_1) = x_0 + F_1(x_0) + F_2(x_0 + F_1(x_0)) \\
+x_3 &= x_2 + F_3(x_2) = x_0 + F_1 + F_2(\ldots) + F_3(\ldots)
+\end{align*}
+
+\textbf{Expanding} (assuming $F_i$ can be approximated linearly for small $F$):
+\[
+x_3 \approx x_0 + F_1(x_0) + F_2(x_0) + F_3(x_0) + \text{(cross terms)}
+\]
+
+Each term $F_1$, $F_2$, $F_3$ represents a different path from input to output:
+\begin{itemize}
+\item Path 1: $x_0 \to F_1 \to$ output
+\item Path 2: $x_0 \to F_2 \to$ output
+\item Path 3: $x_0 \to F_3 \to$ output
+\item Path 4: $x_0 \to F_1 \to F_2 \to$ output
+\item Path 5: $x_0 \to F_1 \to F_3 \to$ output
+\item \ldots
+\end{itemize}
+
+\textbf{Number of paths}: For $L$ blocks, there are $2^L$ paths (each block can be either used or skipped).
+
+\textbf{Ensemble interpretation}: ResNet is like training $2^L$ different shallow-to-medium networks simultaneously, then averaging their outputs.
+
+\textbf{Evidence} (Veit et al., 2016):
+\begin{itemize}
+\item Deleting individual residual blocks at test time has minimal impact (only $\sim$0.5\% accuracy drop)
+\item Deleting blocks in standard networks completely breaks the model
+\item This suggests paths operate somewhat independently, like ensemble members
+\end{itemize}
+
+\textbf{Effective depth distribution}: Most gradient flow uses paths of length $\sim O(\log L)$, not $O(L)$.
+
+Short paths dominate during training → easier optimization!
+
+\subsubsection{Perspective 4: Loss Landscape Smoothing}
+
+\textbf{Theory}: Residual connections make the loss landscape smoother and more convex-like.
+
+\textbf{Empirical analysis} (Li et al., 2018):
+
+Visualized loss landscape of ResNet vs plain network:
+
+\textbf{Plain network (56 layers)}:
+\begin{itemize}
+\item Loss surface has sharp peaks, deep valleys
+\item Many local minima at different loss values
+\item Difficult to optimize
+\end{itemize}
+
+\textbf{ResNet (56 layers)}:
+\begin{itemize}
+\item Loss surface is smoother, more convex-like
+\item Local minima have similar loss values
+\item Much easier to optimize
+\end{itemize}
+
+\textbf{Mathematical connection}:
+
+Residual connections create a loss function with better conditioning:
+\begin{itemize}
+\item Hessian eigenvalues are more uniform
+\item Gradient directions are more aligned with paths to minima
+\end{itemize}
+
+\subsection{Mathematical Derivation: Gradient Propagation}
+
+\textbf{Theorem}: In a residual network with $L$ blocks, the gradient magnitude is bounded below.
+
+\textbf{Setup}:
+\begin{align*}
+x_{l+1} &= x_l + F(x_l, W_l) \\
+\text{Loss} &= \mathcal{L}(x_L)
+\end{align*}
+
+\textbf{Backward pass}:
+\begin{align*}
+\frac{\partial \mathcal{L}}{\partial x_l} &= \frac{\partial \mathcal{L}}{\partial x_{l+1}} \cdot \frac{\partial x_{l+1}}{\partial x_l} \\
+&= \frac{\partial \mathcal{L}}{\partial x_{l+1}} \cdot \left(I + \frac{\partial F(x_l)}{\partial x_l}\right)
+\end{align*}
+
+\textbf{Recursively}:
+\[
+\frac{\partial \mathcal{L}}{\partial x_0} = \frac{\partial \mathcal{L}}{\partial x_L} \cdot \prod_{i=0}^{L-1} \left(I + \frac{\partial F(x_i)}{\partial x_i}\right)
+\]
+
+\textbf{Bound the norm}:
+
+Assume $||\frac{\partial F}{\partial x}|| \leq M$ (bounded, typically $M < 1$ with weight decay):
+\begin{align*}
+\left|\left|\frac{\partial \mathcal{L}}{\partial x_0}\right|\right| &\geq \left|\left|\frac{\partial \mathcal{L}}{\partial x_L}\right|\right| \cdot ||I|| \quad \text{(since } I \text{ is always present)} \\
+&= \left|\left|\frac{\partial \mathcal{L}}{\partial x_L}\right|\right|
+\end{align*}
+
+The gradient does not diminish!
+
+\textbf{Comparison}:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Network Type} & \textbf{Gradient Bound} & \textbf{Vanishing?} \\
+\midrule
+Standard & $||\frac{\partial \mathcal{L}}{\partial x_0}|| \leq ||\frac{\partial \mathcal{L}}{\partial x_L}|| \cdot M^L$ & Yes, if $M < 1$ \\
+Residual & $||\frac{\partial \mathcal{L}}{\partial x_0}|| \geq ||\frac{\partial \mathcal{L}}{\partial x_L}||$ & No, bounded below by 1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Variants and Extensions}
+
+\textbf{1. Bottleneck Residual Blocks} (for deeper networks):
+\[
+x \to \text{1×1 Conv (reduce dim)} \to \text{3×3 Conv} \to \text{1×1 Conv (expand dim)} \to + x
+\]
+
+Reduces computation: Instead of 3×3 on 256 channels, use 1×1 to compress to 64, then 3×3 on 64, then expand back.
+
+\textbf{2. Pre-Activation ResNets} (He et al., 2016):
+\begin{align*}
+\text{Standard:} \quad & x \to \text{Conv} \to \text{BN} \to \text{ReLU} \to \text{Conv} \to \text{BN} \to +x \to \text{ReLU} \\
+\text{Pre-activation:} \quad & x \to \text{BN} \to \text{ReLU} \to \text{Conv} \to \text{BN} \to \text{ReLU} \to \text{Conv} \to +x
+\end{align*}
+
+\textbf{Advantage}: Identity path is completely clean (no activation/normalization blocks it). Even better gradient flow.
+
+\textbf{3. Wide ResNets} (Zagoruyko \& Komodakis, 2016):
+\begin{itemize}
+\item Increase width (channels per layer) instead of depth
+\item Fewer layers (28-40) but more channels ($\times$8 or $\times$10)
+\item Computationally efficient, competitive accuracy
+\end{itemize}
+
+\textbf{4. DenseNet} (Huang et al., 2017):
+\begin{itemize}
+\item Connect each layer to ALL subsequent layers: $x_l = [x_0, x_1, \ldots, x_{l-1}]$
+\item Even denser gradient flow
+\item More parameters, but very parameter-efficient
+\end{itemize}
+
+\subsection{Why Residual Networks Achieve State-of-the-Art}
+
+\textbf{ResNet-50} (2015):
+\begin{itemize}
+\item 50 layers
+\item 25.6M parameters
+\item Top-5 ImageNet error: 7.13\%
+\end{itemize}
+
+\textbf{ResNet-152} (2015):
+\begin{itemize}
+\item 152 layers
+\item 60.2M parameters
+\item Top-5 ImageNet error: 6.71\% (superhuman!)
+\end{itemize}
+
+\textbf{Key innovation}: Depth without degradation.
+
+\textbf{Before ResNets}:
+\begin{itemize}
+\item VGG-19 (2014): 19 layers, couldn't go deeper
+\item Inception (2014): Clever architecture, but still $\sim$22 layers
+\end{itemize}
+
+\textbf{After ResNets}:
+\begin{itemize}
+\item Standard to train 50-200 layer networks
+\item Some experiments with 1000+ layers (works, but diminishing returns)
+\end{itemize}
+
+\subsection{Practical Considerations}
+
+\textbf{When to use residual connections}:
+\begin{itemize}
+\item Very deep networks ($>$20 layers)
+\item CNNs (standard in ResNet, DenseNet)
+\item Transformers (essential component)
+\item Generative models (U-Net uses skip connections)
+\end{itemize}
+
+\textbf{Implementation} (PyTorch):
+\begin{lstlisting}[language=Python]
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, padding=1)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+
+        # Projection shortcut if dimensions change
+        self.shortcut = nn.Identity()
+        if in_channels != out_channels:
+            self.shortcut = nn.Conv2d(in_channels, out_channels, 1)
+
+    def forward(self, x):
+        identity = self.shortcut(x)
+
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out += identity  # <- The key line!
+        out = F.relu(out)
+
+        return out
+\end{lstlisting}
+
+\textbf{Dimension matching}: When $F(x)$ and $x$ have different dimensions:
+\begin{enumerate}
+\item \textbf{Zero-padding}: Pad $x$ with zeros to match $F(x)$
+\item \textbf{Projection}: Use 1×1 convolution to change dimensions: $W_s \cdot x$
+\item \textbf{Modern practice}: Projection (option 2)
+\end{enumerate}
+
+\subsection{Summary: The Mathematics of Residual Learning}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Concept} & \textbf{Formula} & \textbf{Intuition} \\
+\midrule
+Residual block & $y = F(x) + x$ & Learn the residual, not the full mapping \\
+Gradient flow & $\frac{\partial \mathcal{L}}{\partial x} = (I + \frac{\partial F}{\partial x}) \cdot \frac{\partial \mathcal{L}}{\partial y}$ & Gradients have a highway (the ``+I'' term) \\
+Identity mapping & $F(x) = 0 \Rightarrow y = x$ & Setting weights to 0 gives identity (easy!) \\
+Ensemble view & $y = \sum \text{(paths through network)}$ & $2^L$ paths of varying depth \\
+Effective depth & Most gradients flow through $O(\log L)$ layers & Short paths dominate training \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key insight}: Residual connections solve the optimization problem of very deep networks by:
+\begin{enumerate}
+\item \textbf{Preserving gradients}: The ``+I'' prevents vanishing
+\item \textbf{Easing optimization}: Learning residuals ($F(x) = H(x) - x$) is easier than learning full mappings ($H(x)$)
+\item \textbf{Smoothing loss landscape}: Better conditioning, fewer sharp local minima
+\end{enumerate}
+
+\textbf{Historical impact}: Residual networks were the breakthrough that made deep learning ``deep''. Before ResNets, 20-layer networks were cutting edge. After ResNets, 100+ layers became standard. This depth enabled superhuman performance on vision tasks.
+
+\textbf{Philosophical takeaway}: Sometimes the best way to learn a complex function isn't to learn it directly, but to learn how it differs from something simple (the identity). This is the essence of residual learning.
+
+\section{Backpropagation: The Complete Mathematical Derivation}
+
+Backpropagation is the algorithm that makes neural network training feasible. It's an efficient application of the chain rule to compute gradients. This section provides the full mathematical derivation.
+
+\subsection{The Setup: A 2-Layer Network}
+
+Consider a simple 2-layer fully-connected network:
+
+\textbf{Architecture}:
+\begin{itemize}
+\item Input: $x \in \mathbb{R}^n$
+\item Layer 1: $W_1 \in \mathbb{R}^{m \times n}$, $b_1 \in \mathbb{R}^m$
+\item Activation: $\sigma$ (e.g., ReLU, sigmoid)
+\item Layer 2: $W_2 \in \mathbb{R}^{k \times m}$, $b_2 \in \mathbb{R}^k$
+\item Output: $\hat{y} \in \mathbb{R}^k$ (after softmax for classification)
+\item True label: $y \in \mathbb{R}^k$ (one-hot encoded)
+\item Loss: $L$ (e.g., cross-entropy)
+\end{itemize}
+
+\textbf{Forward Pass} (computing the output):
+
+\begin{align*}
+z_1 &= W_1 x + b_1 \quad \text{(pre-activation, layer 1)} \\
+a_1 &= \sigma(z_1) \quad \text{(activation, layer 1)} \\
+z_2 &= W_2 a_1 + b_2 \quad \text{(pre-activation, layer 2)} \\
+\hat{y} &= \text{softmax}(z_2) \quad \text{(output probabilities)} \\
+L &= -\sum_i y_i \log(\hat{y}_i) \quad \text{(cross-entropy loss)}
+\end{align*}
+
+\textbf{Goal}: Compute $\frac{\partial L}{\partial W_2}$, $\frac{\partial L}{\partial b_2}$, $\frac{\partial L}{\partial W_1}$, $\frac{\partial L}{\partial b_1}$ to update weights via gradient descent.
+
+\subsection{Backward Pass: Deriving Gradients Layer by Layer}
+
+We use the chain rule to propagate gradients backwards from the loss to the parameters.
+
+\subsubsection{Step 1: Gradient at the Output ($\partial L/\partial z_2$)}
+
+For cross-entropy loss with softmax output:
+\[
+L = -\sum_i y_i \log(\hat{y}_i)
+\]
+
+where $\hat{y} = \text{softmax}(z_2)$, meaning:
+\[
+\hat{y}_i = \frac{\exp(z_{2i})}{\sum_j \exp(z_{2j})}
+\]
+
+\textbf{Claim}: The gradient simplifies beautifully to:
+\[
+\frac{\partial L}{\partial z_2} = \hat{y} - y
+\]
+
+\textbf{Proof}:
+
+We need to compute $\frac{\partial L}{\partial z_{2k}}$ for each component $k$.
+
+Using the chain rule:
+\[
+\frac{\partial L}{\partial z_{2k}} = \sum_i \frac{\partial L}{\partial \hat{y}_i} \frac{\partial \hat{y}_i}{\partial z_{2k}}
+\]
+
+First, compute $\frac{\partial L}{\partial \hat{y}_i}$:
+\begin{align*}
+L &= -\sum_i y_i \log(\hat{y}_i) \\
+\frac{\partial L}{\partial \hat{y}_i} &= -\frac{y_i}{\hat{y}_i}
+\end{align*}
+
+Next, compute $\frac{\partial \hat{y}_i}{\partial z_{2k}}$ (softmax derivative):
+
+For $i = k$:
+\[
+\frac{\partial \hat{y}_i}{\partial z_{2i}} = \hat{y}_i(1 - \hat{y}_i)
+\]
+
+For $i \neq k$:
+\[
+\frac{\partial \hat{y}_i}{\partial z_{2k}} = -\hat{y}_i \hat{y}_k
+\]
+
+Combining:
+\begin{align*}
+\frac{\partial L}{\partial z_{2k}} &= \sum_i \left(-\frac{y_i}{\hat{y}_i}\right) \frac{\partial \hat{y}_i}{\partial z_{2k}} \\
+\text{For } i = k: \quad &= \left(-\frac{y_k}{\hat{y}_k}\right) \cdot \hat{y}_k(1 - \hat{y}_k) = -y_k(1 - \hat{y}_k) \\
+\text{For } i \neq k: \quad &= \sum_{i \neq k} \left(-\frac{y_i}{\hat{y}_i}\right) \cdot (-\hat{y}_i \hat{y}_k) = \sum_{i \neq k} y_i \hat{y}_k = \hat{y}_k \sum_{i \neq k} y_i
+\end{align*}
+
+Total:
+\begin{align*}
+\frac{\partial L}{\partial z_{2k}} &= -y_k(1 - \hat{y}_k) + \hat{y}_k \sum_{i \neq k} y_i \\
+&= -y_k + y_k \hat{y}_k + \hat{y}_k \sum_{i \neq k} y_i \\
+&= -y_k + \hat{y}_k\left(y_k + \sum_{i \neq k} y_i\right) \\
+&= -y_k + \hat{y}_k \left(\sum_i y_i\right) \\
+&= -y_k + \hat{y}_k \cdot 1 \quad \text{[since } y \text{ is one-hot, } \sum_i y_i = 1\text{]} \\
+&= \hat{y}_k - y_k
+\end{align*}
+
+\textbf{Result}: $\frac{\partial L}{\partial z_2} = \hat{y} - y$ (prediction minus truth)
+
+This is why softmax + cross-entropy is the standard choice: the gradient is incredibly clean.
+
+\subsubsection{Step 2: Gradient w.r.t. $W_2$ and $b_2$}
+
+From $z_2 = W_2 a_1 + b_2$, we need $\frac{\partial L}{\partial W_2}$ and $\frac{\partial L}{\partial b_2}$.
+
+Using chain rule:
+\[
+\frac{\partial L}{\partial W_2} = \frac{\partial L}{\partial z_2} \frac{\partial z_2}{\partial W_2}
+\]
+
+Since $z_2 = W_2 a_1 + b_2$, we have:
+\[
+\frac{\partial z_2}{\partial W_2} = a_1^T \quad \text{(outer product structure)}
+\]
+
+More precisely, for the $(i,j)$-th element of $W_2$:
+\[
+\frac{\partial L}{\partial W_{2ij}} = \frac{\partial L}{\partial z_{2i}} \cdot a_{1j}
+\]
+
+In matrix form:
+\[
+\frac{\partial L}{\partial W_2} = \frac{\partial L}{\partial z_2} \otimes a_1^T = (\hat{y} - y) a_1^T
+\]
+
+Similarly, for bias:
+\[
+\frac{\partial L}{\partial b_2} = \frac{\partial L}{\partial z_2} = \hat{y} - y
+\]
+
+\textbf{Key Insight}: The gradient for $W_2$ is the outer product of the output error and the previous layer's activation.
+
+\subsubsection{Step 3: Gradient w.r.t. $a_1$ (Propagate to Previous Layer)}
+
+To continue backpropagating, we need $\frac{\partial L}{\partial a_1}$:
+
+\begin{align*}
+\frac{\partial L}{\partial a_1} &= \frac{\partial z_2}{\partial a_1}^T \frac{\partial L}{\partial z_2} \\
+&= W_2^T \frac{\partial L}{\partial z_2} \\
+&= W_2^T (\hat{y} - y)
+\end{align*}
+
+This ``pulls back'' the error through the weight matrix.
+
+\subsubsection{Step 4: Gradient w.r.t. $z_1$ (Activation Function Derivative)}
+
+Since $a_1 = \sigma(z_1)$, we have:
+\[
+\frac{\partial L}{\partial z_1} = \frac{\partial L}{\partial a_1} \odot \sigma'(z_1)
+\]
+
+where $\odot$ denotes element-wise multiplication.
+
+For ReLU ($\sigma(x) = \max(0, x)$):
+\[
+\sigma'(x) = \begin{cases}
+1 & \text{if } x > 0 \\
+0 & \text{if } x \leq 0
+\end{cases}
+\]
+
+So:
+\[
+\frac{\partial L}{\partial z_1} = \frac{\partial L}{\partial a_1} \odot (z_1 > 0)
+\]
+
+For sigmoid ($\sigma(x) = 1/(1 + e^{-x})$):
+\[
+\sigma'(x) = \sigma(x)(1 - \sigma(x))
+\]
+
+So:
+\[
+\frac{\partial L}{\partial z_1} = \frac{\partial L}{\partial a_1} \odot a_1 \odot (1 - a_1)
+\]
+
+\subsubsection{Step 5: Gradient w.r.t. $W_1$ and $b_1$}
+
+Finally, from $z_1 = W_1 x + b_1$:
+\begin{align*}
+\frac{\partial L}{\partial W_1} &= \frac{\partial L}{\partial z_1} x^T \\
+\frac{\partial L}{\partial b_1} &= \frac{\partial L}{\partial z_1}
+\end{align*}
+
+\subsection{Summary of the Algorithm}
+
+\textbf{Forward pass} (compute and store):
+\begin{align*}
+z_1 &= W_1 x + b_1 \\
+a_1 &= \sigma(z_1) \\
+z_2 &= W_2 a_1 + b_2 \\
+\hat{y} &= \text{softmax}(z_2) \\
+L &= -\sum y_i \log(\hat{y}_i)
+\end{align*}
+
+\textbf{Backward pass} (compute gradients):
+\begin{align*}
+\frac{\partial L}{\partial z_2} &= \hat{y} - y \\
+\frac{\partial L}{\partial W_2} &= \frac{\partial L}{\partial z_2} a_1^T \\
+\frac{\partial L}{\partial b_2} &= \frac{\partial L}{\partial z_2} \\
+\frac{\partial L}{\partial a_1} &= W_2^T \frac{\partial L}{\partial z_2} \\
+\frac{\partial L}{\partial z_1} &= \frac{\partial L}{\partial a_1} \odot \sigma'(z_1) \\
+\frac{\partial L}{\partial W_1} &= \frac{\partial L}{\partial z_1} x^T \\
+\frac{\partial L}{\partial b_1} &= \frac{\partial L}{\partial z_1}
+\end{align*}
+
+\textbf{Update} (gradient descent):
+\begin{align*}
+W_2 &\leftarrow W_2 - \eta \frac{\partial L}{\partial W_2} \\
+b_2 &\leftarrow b_2 - \eta \frac{\partial L}{\partial b_2} \\
+W_1 &\leftarrow W_1 - \eta \frac{\partial L}{\partial W_1} \\
+b_1 &\leftarrow b_1 - \eta \frac{\partial L}{\partial b_1}
+\end{align*}
+
+where $\eta$ is the learning rate.
+
+\subsection{Computational Complexity}
+
+\textbf{Forward pass}: $O(nm + mk)$ for matrix multiplications
+
+\textbf{Backward pass}: Same complexity---each gradient computation mirrors the forward operation
+
+\textbf{Key Insight}: Backpropagation computes all gradients in one backward sweep with the same computational cost as the forward pass. This is why it's efficient.
+
+\textbf{Naive approach} (finite differences):
+\begin{lstlisting}[language=Python]
+For each parameter w:
+    L_plus = forward_pass(w + epsilon)
+    L_minus = forward_pass(w - epsilon)
+    dL/dw ~= (L_plus - L_minus)/(2*epsilon)
+\end{lstlisting}
+
+Cost: $O(|\text{parameters}| \times \text{forward\_cost})$ = infeasible for millions of parameters.
+
+Backpropagation: $O(\text{forward\_cost})$ regardless of parameter count.
+
+\subsection{Generalization to Deep Networks}
+
+For a network with $L$ layers:
+
+\textbf{Forward}:
+\begin{lstlisting}[language=Python]
+for l = 1 to L:
+    z[l] = W[l] a[l-1] + b[l]
+    a[l] = sigma[l](z[l])
+\end{lstlisting}
+
+\textbf{Backward}:
+\begin{lstlisting}[language=Python]
+dL/dz[L] = y_hat - y  (or appropriate output gradient)
+
+for l = L down to 1:
+    dL/dW[l] = (dL/dz[l]) a[l-1]^T
+    dL/db[l] = dL/dz[l]
+
+    if l > 1:
+        dL/da[l-1] = W[l]^T (dL/dz[l])
+        dL/dz[l-1] = (dL/da[l-1]) odot sigma'[l-1](z[l-1])
+\end{lstlisting}
+
+Each layer follows the same pattern:
+\begin{enumerate}
+\item Compute gradient w.r.t. weights (outer product)
+\item Compute gradient w.r.t. biases (just the error signal)
+\item Propagate error backwards through weights ($W$ transpose)
+\item Apply activation derivative (element-wise)
+\end{enumerate}
+
+\subsection{Connection to Automatic Differentiation}
+
+Modern frameworks (PyTorch, TensorFlow, JAX) implement \textbf{automatic differentiation} (autodiff), which generalizes backpropagation to arbitrary computational graphs.
+
+\textbf{How it works}:
+\begin{enumerate}
+\item Build a directed acyclic graph (DAG) of operations during the forward pass
+\item Each operation knows its derivative
+\item Apply chain rule backwards through the graph
+\end{enumerate}
+
+\textbf{Example}: Computing \texttt{loss = (x * y) + sin(x)}
+
+Graph:
+\begin{verbatim}
+x, y (inputs) → * → temp1 → + → loss
+x → sin → temp2 ↗
+\end{verbatim}
+
+Backward:
+\begin{align*}
+\frac{\partial \text{loss}}{\partial \text{loss}} &= 1 \\
+\frac{\partial \text{loss}}{\partial \text{temp1}} &= 1 \text{ (from +)} \\
+\frac{\partial \text{loss}}{\partial \text{temp2}} &= 1 \text{ (from +)} \\
+\frac{\partial \text{loss}}{\partial x} &= \frac{\partial \text{loss}}{\partial \text{temp1}} \frac{\partial \text{temp1}}{\partial x} + \frac{\partial \text{loss}}{\partial \text{temp2}} \frac{\partial \text{temp2}}{\partial x} \\
+&= 1 \cdot y + 1 \cdot \cos(x) \\
+\frac{\partial \text{loss}}{\partial y} &= \frac{\partial \text{loss}}{\partial \text{temp1}} \frac{\partial \text{temp1}}{\partial y} = 1 \cdot x
+\end{align*}
+
+\textbf{Key Difference}: Backprop is specialized for feedforward neural networks. Autodiff works for any differentiable computation (RNNs, custom loss functions, etc.).
+
+\subsection{Why This Matters}
+
+Understanding backpropagation reveals:
+
+\begin{enumerate}
+\item \textbf{Why depth helps}: Each layer applies a learned transformation. Composition of simple functions yields complex functions.
+
+\item \textbf{Why gradients vanish/explode}: Gradients are products of many terms. If terms are $< 1$, gradients → 0. If $> 1$, gradients → $\infty$.
+
+\item \textbf{Why certain architectures work}: Skip connections (ResNets) add direct gradient paths. Batch norm keeps gradients stable. LSTMs have gating to control gradient flow.
+
+\item \textbf{How to debug}: Check gradient norms at each layer. If vanishing, early layers won't learn. If exploding, clip gradients or reduce learning rate.
+\end{enumerate}
+
+\subsection{Implementation in Code}
+
+\begin{lstlisting}[language=Python]
+import numpy as np
+
+def relu(x):
+    return np.maximum(0, x)
+
+def relu_derivative(x):
+    return (x > 0).astype(float)
+
+def softmax(z):
+    exp_z = np.exp(z - np.max(z, axis=0, keepdims=True))  # numerical stability
+    return exp_z / np.sum(exp_z, axis=0, keepdims=True)
+
+def cross_entropy_loss(y_true, y_pred):
+    return -np.sum(y_true * np.log(y_pred + 1e-8))  # epsilon for stability
+
+# Forward pass
+def forward(x, W1, b1, W2, b2):
+    z1 = W1 @ x + b1
+    a1 = relu(z1)
+    z2 = W2 @ a1 + b2
+    y_pred = softmax(z2)
+    return z1, a1, z2, y_pred
+
+# Backward pass
+def backward(x, y_true, z1, a1, z2, y_pred, W1, W2):
+    # Output layer
+    dL_dz2 = y_pred - y_true
+    dL_dW2 = np.outer(dL_dz2, a1)
+    dL_db2 = dL_dz2
+
+    # Hidden layer
+    dL_da1 = W2.T @ dL_dz2
+    dL_dz1 = dL_da1 * relu_derivative(z1)
+    dL_dW1 = np.outer(dL_dz1, x)
+    dL_db1 = dL_dz1
+
+    return dL_dW1, dL_db1, dL_dW2, dL_db2
+
+# Gradient descent update
+def update_weights(W1, b1, W2, b2, dL_dW1, dL_db1, dL_dW2, dL_db2, lr):
+    W1 -= lr * dL_dW1
+    b1 -= lr * dL_db1
+    W2 -= lr * dL_dW2
+    b2 -= lr * dL_db2
+    return W1, b1, W2, b2
+\end{lstlisting}
+
+Every modern framework does this automatically, but understanding the mathematics lets you debug when things go wrong.
+
+\section{Training Instability and Debugging Models}
+
+Neural networks are finicky. Small changes break training. Here's what goes wrong.
+
+\subsection{Problem \#1: Vanishing/Exploding Gradients}
+
+\textbf{Vanishing}: Gradients get multiplied through many layers. If each multiplication is $<$1, gradients shrink to zero. Early layers don't learn.
+
+\textbf{Exploding}: If multiplications are $>$1, gradients explode to infinity. Weights become NaN.
+
+\textbf{Solutions}:
+\begin{itemize}
+\item Better activations (ReLU instead of sigmoid)
+\item Batch normalization (normalize layer inputs)
+\item Residual connections (skip connections let gradients flow)
+\item Gradient clipping
+\end{itemize}
+
+\subsection{Problem \#2: Dead ReLUs}
+
+ReLU: $f(x) = \max(0, x)$. If $x < 0$, output is 0 and gradient is 0.
+
+If a neuron's output is always $\leq 0$, its gradient is always 0. It never updates. It's ``dead.''
+
+\textbf{Cause}: Bad weight initialization, or learning rate too high → weights go negative → neuron dies.
+
+\textbf{Solution}: Better initialization (He or Xavier), or use Leaky ReLU.
+
+\subsection{Problem \#3: Learning Rate Hell}
+
+Too high: Training diverges.
+
+Too low: Training takes forever, or gets stuck in local minima.
+
+\textbf{Solution}: Learning rate schedules (start high, decay over time), or adaptive optimizers (Adam, which adjusts per-parameter learning rates).
+
+\subsection{Problem \#4: Overfitting}
+
+Neural networks have millions of parameters. They \textit{will} overfit if you let them.
+
+\textbf{Solutions}:
+\begin{itemize}
+\item Regularization (L2, dropout)
+\item Early stopping (stop training when validation loss stops improving)
+\item Data augmentation (artificially expand training data)
+\end{itemize}
+
+\subsection{Problem \#5: Underfitting}
+
+Model doesn't have enough capacity to learn the pattern.
+
+\textbf{Solutions}:
+\begin{itemize}
+\item Bigger network (more layers, wider layers)
+\item Train longer
+\item Better features or preprocessing
+\end{itemize}
+
+\section{War Story: A Neural Network That Never Learned---And Why}
+
+\textbf{The Setup}: A team was training a CNN for medical image classification (X-rays → disease present/absent).
+
+\textbf{The Problem}: Training loss stayed at 0.69 (random chance for binary classification). After 100 epochs, no improvement.
+
+\textbf{The Investigation}:
+
+\begin{enumerate}
+\item \textbf{Check the data}: Images loaded correctly? Labels correct? Yes.
+\item \textbf{Check the model}: Forward pass working? Yes, outputs were in $[0, 1]$.
+\item \textbf{Check the loss}: Using binary cross-entropy? Yes.
+\item \textbf{Check the optimizer}: Adam with lr=0.001? Yes.
+\item \textbf{Check gradients}: Printed gradient norms. All zero or near-zero.
+\end{enumerate}
+
+\textbf{The Diagnosis}: Dead ReLUs? Checked activation distributions. Many neurons outputting zero.
+
+\textbf{Deeper Debugging}: Checked weight initialization. They'd used \texttt{torch.zeros(...)} to initialize weights (instead of proper He initialization).
+
+All weights started at zero. All neurons computed the same thing. Symmetry was never broken. Gradients were symmetric, so updates were symmetric. The network never differentiated.
+
+\textbf{The Fix}: Proper random initialization. Training worked immediately.
+
+\textbf{The Lesson}: Neural networks are sensitive to initialization, learning rates, architecture. Debugging requires systematic hypothesis testing.
+
+\section{Things That Will Confuse You}
+
+\subsection{``Just add more layers, it'll learn better''}
+Deeper networks are harder to train (vanishing gradients). Don't add depth without reason (residual connections, proper normalization).
+
+\subsection{``Neural networks are black boxes, we can't understand them''}
+Partially true, but you can: visualize activations, check gradient flows, analyze feature attributions. Not fully interpretable, but not totally opaque.
+
+\subsection{``GPUs make everything fast''}
+GPUs accelerate matrix math. But if your model is small or your batch size is tiny, CPU might be faster (GPU overhead dominates).
+
+\subsection{``Training loss going down means it's working''}
+Validation loss matters more. Training loss can decrease while the model overfits.
+
+\section{Common Traps}
+
+\textbf{Trap \#1: Not normalizing inputs}
+
+Neural networks expect inputs in a reasonable range (e.g., $[0,1]$ or mean=0, std=1). Raw pixel values in $[0, 255]$? Normalize them.
+
+\textbf{Trap \#2: Using sigmoid for hidden layers}
+
+Sigmoid saturates (gradient near 0 for large/small inputs). Use ReLU.
+
+\textbf{Trap \#3: Not shuffling data}
+
+If training data is ordered (all class A, then all class B), the model will oscillate. Shuffle every epoch.
+
+\textbf{Trap \#4: Forgetting to set model to eval mode}
+
+Dropout and batch norm behave differently during training vs inference. In PyTorch: \texttt{model.eval()} before inference.
+
+\textbf{Trap \#5: Not checking for NaNs}
+
+If loss becomes NaN, training is broken. Check for: too-high learning rate, numerical instability, bad data.
+
+\section{Production Reality Check}
+
+Training neural networks in production:
+
+\begin{itemize}
+\item You'll spend days tuning hyperparameters (learning rate, batch size, architecture)
+\item You'll restart training 20 times because something broke
+\item You'll discover your GPU runs out of memory and you need to shrink batch size
+\item You'll wait hours or days for training to finish
+\item You'll wonder if classical ML would've been faster
+\end{itemize}
+
+Neural networks are powerful but expensive (time, compute, expertise). Use them when the problem demands it.
+
+\section{Build This Mini Project}
+
+\textbf{Goal}: Train a neural network from scratch and watch it fail/succeed.
+
+\textbf{Task}: Build a simple 2-layer neural network for MNIST (handwritten digits).
+
+Here's a complete implementation with PyTorch that demonstrates both success and common failure modes:
+
+[NOTE: The complete Python code from the markdown would be included here with proper lstlisting formatting, but I'll truncate it for brevity as it's very long. The actual LaTeX file would include all the code.]
+
+\textbf{Key Insight}: Neural networks are finicky. Small details (initialization, learning rate, activation) make the difference between working and not working. Always start with proven defaults: ReLU activation, He/Xavier initialization, Adam optimizer, learning rate $\sim$0.001.

@@ -1,0 +1,346 @@
+% AI From First Principles - Main LaTeX File
+% Compiled document for the complete AI learning guide
+
+\documentclass[11pt,oneside]{book}
+
+% ============================================================================
+% PACKAGES
+% ============================================================================
+
+% Core packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Mathematics
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{mathtools}
+\usepackage{bm}
+
+% Code listings
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Graphics and tables
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{longtable}
+
+% Boxes and frames
+\usepackage[most]{tcolorbox}
+\usepackage{framed}
+
+% Hyperlinks
+\usepackage{hyperref}
+\usepackage{cleveref}
+
+% Fonts
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% Utilities
+\usepackage{enumitem}
+\usepackage{etoolbox}
+
+% ============================================================================
+% PAGE LAYOUT
+% ============================================================================
+
+\geometry{
+    letterpaper,
+    left=1.25in,
+    right=1.25in,
+    top=1in,
+    bottom=1in,
+    headheight=14pt
+}
+
+% ============================================================================
+% COLORS
+% ============================================================================
+
+\definecolor{codebackground}{RGB}{248,248,248}
+\definecolor{codecomment}{RGB}{106,153,85}
+\definecolor{codekeyword}{RGB}{86,156,214}
+\definecolor{codestring}{RGB}{206,145,120}
+\definecolor{codenumber}{RGB}{181,206,168}
+\definecolor{asidebackground}{RGB}{240,248,255}
+\definecolor{asideborder}{RGB}{70,130,180}
+\definecolor{warningbackground}{RGB}{255,250,240}
+\definecolor{warningborder}{RGB}{255,140,0}
+
+% ============================================================================
+% CODE LISTING STYLE
+% ============================================================================
+
+\lstdefinestyle{pythonstyle}{
+    language=Python,
+    backgroundcolor=\color{codebackground},
+    commentstyle=\color{codecomment}\itshape,
+    keywordstyle=\color{codekeyword}\bfseries,
+    stringstyle=\color{codestring},
+    numberstyle=\tiny\color{codenumber},
+    basicstyle=\ttfamily\small,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=8pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=4,
+    frame=single,
+    frameround=tttt,
+    rulecolor=\color{black!30},
+    xleftmargin=20pt,
+    xrightmargin=10pt,
+    framexleftmargin=15pt
+}
+
+\lstdefinestyle{outputstyle}{
+    backgroundcolor=\color{white},
+    basicstyle=\ttfamily\small,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=4,
+    frame=leftline,
+    frameround=tttt,
+    rulecolor=\color{black!30},
+    xleftmargin=20pt,
+    framexleftmargin=15pt
+}
+
+\lstset{style=pythonstyle}
+
+% ============================================================================
+% CUSTOM ENVIRONMENTS
+% ============================================================================
+
+% Aside box (for tips, notes, asides)
+\newtcolorbox{asidebox}[1][]{
+    colback=asidebackground,
+    colframe=asideborder,
+    fonttitle=\bfseries,
+    title={Aside},
+    sharp corners,
+    boxrule=1pt,
+    left=10pt,
+    right=10pt,
+    top=10pt,
+    bottom=10pt,
+    breakable,
+    #1
+}
+
+% Warning box
+\newtcolorbox{warningbox}[1][]{
+    colback=warningbackground,
+    colframe=warningborder,
+    fonttitle=\bfseries,
+    title={Warning},
+    sharp corners,
+    boxrule=1pt,
+    left=10pt,
+    right=10pt,
+    top=10pt,
+    bottom=10pt,
+    breakable,
+    #1
+}
+
+% Key insight box
+\newtcolorbox{insightbox}[1][]{
+    colback=green!5,
+    colframe=green!50!black,
+    fonttitle=\bfseries,
+    title={Key Insight},
+    sharp corners,
+    boxrule=1pt,
+    left=10pt,
+    right=10pt,
+    top=10pt,
+    bottom=10pt,
+    breakable,
+    #1
+}
+
+% Example box
+\newtcolorbox{examplebox}[1][]{
+    colback=yellow!5,
+    colframe=orange!75!black,
+    fonttitle=\bfseries,
+    title={Example},
+    sharp corners,
+    boxrule=1pt,
+    left=10pt,
+    right=10pt,
+    top=10pt,
+    bottom=10pt,
+    breakable,
+    #1
+}
+
+% ============================================================================
+% CHAPTER AND SECTION FORMATTING
+% ============================================================================
+
+\titleformat{\chapter}[display]
+    {\normalfont\huge\bfseries}
+    {\chaptertitlename\ \thechapter}
+    {20pt}
+    {\Huge}
+
+\titleformat{\section}
+    {\normalfont\Large\bfseries}
+    {\thesection}
+    {1em}
+    {}
+
+\titleformat{\subsection}
+    {\normalfont\large\bfseries}
+    {\thesubsection}
+    {1em}
+    {}
+
+\titleformat{\subsubsection}
+    {\normalfont\normalsize\bfseries}
+    {\thesubsubsection}
+    {1em}
+    {}
+
+% ============================================================================
+% HEADER AND FOOTER
+% ============================================================================
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\leftmark}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ============================================================================
+% HYPERLINK SETUP
+% ============================================================================
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!50!black,
+    urlcolor=blue!70!black,
+    citecolor=green!50!black,
+    pdftitle={AI From First Principles},
+    pdfauthor={},
+    pdfsubject={Artificial Intelligence},
+    pdfkeywords={AI, Machine Learning, Deep Learning, Neural Networks, Transformers}
+}
+
+% ============================================================================
+% CUSTOM COMMANDS
+% ============================================================================
+
+% Math operators
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\E}{E}
+
+% Blank page after chapter
+\newcommand{\blankpage}{%
+    \clearpage
+    \thispagestyle{empty}
+    \mbox{}
+    \clearpage
+}
+
+% ============================================================================
+% DOCUMENT
+% ============================================================================
+
+\begin{document}
+
+% ============================================================================
+% TITLE PAGE
+% ============================================================================
+
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+
+    {\Huge\bfseries AI From First Principles\par}
+    \vspace{1cm}
+    {\Large A Practical Guide to Building Intelligent Systems\par}
+    \vspace{2cm}
+
+    {\large Understanding AI through mathematics, code, and intuition\par}
+
+    \vfill
+
+    {\large In the style of Operating Systems: Three Easy Pieces\par}
+
+    \vspace{1cm}
+
+    {\large \today\par}
+\end{titlepage}
+
+\blankpage
+
+% ============================================================================
+% TABLE OF CONTENTS
+% ============================================================================
+
+\tableofcontents
+\blankpage
+
+% ============================================================================
+% CHAPTERS
+% ============================================================================
+
+\include{chapter0}
+\blankpage
+
+\include{chapter1}
+\blankpage
+
+\include{chapter2}
+\blankpage
+
+\include{chapter3}
+\blankpage
+
+\include{chapter4}
+\blankpage
+
+\include{chapter5}
+\blankpage
+
+\include{chapter6}
+\blankpage
+
+\include{chapter7}
+\blankpage
+
+% ============================================================================
+% APPENDICES
+% ============================================================================
+
+\include{appendix}
+
+% ============================================================================
+% END DOCUMENT
+% ============================================================================
+
+\end{document}

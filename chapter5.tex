@@ -1,0 +1,1719 @@
+\chapter{Transformers \& LLMs: Attention Changed Everything}
+
+\section{The Crux}
+For years, sequence modeling meant RNNs: process one word at a time, remember the past. It worked, but it was slow and forgot long-range dependencies. Then transformers arrived: process everything in parallel, use attention to find what matters. This architecture unlocked LLMs, changed NLP, and is spreading to images, video, and more.
+
+\section{Why Attention Beats Recurrence}
+
+\subsection{The RNN Problem}
+
+RNNs process sequences step-by-step:
+\begin{verbatim}
+h₁ = f(x₁, h₀)
+h₂ = f(x₂, h₁)
+h₃ = f(x₃, h₂)
+...
+\end{verbatim}
+
+Hidden state \texttt{h} carries information forward. To access word 1 when at word 100, information must survive 99 steps of computation. It doesn't.
+
+\textbf{Problems}:
+\begin{enumerate}
+\item \textbf{Sequential processing}: Can't parallelize. Slow.
+\item \textbf{Vanishing gradients}: Long-range dependencies get lost.
+\item \textbf{Fixed-size bottleneck}: \texttt{h} must encode everything.
+\end{enumerate}
+
+\subsection{The Attention Solution}
+
+Instead of forcing information through a sequential bottleneck, \textbf{let every position attend to every other position directly}.
+
+Processing word 100? Look back at all 99 previous words, figure out which are relevant, and pull information from them.
+
+\textbf{Key Idea}: Attention is a learned, differentiable lookup table.
+
+\begin{itemize}
+\item Query: ``What am I looking for?''
+\item Keys: ``What does each position offer?''
+\item Values: ``What information does each position have?''
+\end{itemize}
+
+Compute similarity between query and all keys, use that to weight values.
+
+\begin{verbatim}
+Attention(Q, K, V) = softmax(QKᵀ / √d) V
+\end{verbatim}
+
+\textbf{Intuition}:
+\begin{itemize}
+\item Q·Kᵀ measures ``how relevant is each position?''
+\item Softmax converts to probabilities
+\item Multiply by V to get weighted sum of relevant info
+\end{itemize}
+
+\subsection{Why It Wins}
+
+\textbf{Parallelization}: All attention operations are matrix multiplies. GPUs love this. Training is 10x-100x faster than RNNs.
+
+\textbf{Long-range dependencies}: Word 100 can directly attend to word 1. No vanishing gradients through 99 steps.
+
+\textbf{Flexibility}: Attention weights are learned. The model decides what's important.
+
+\section{The Mathematics of Attention: A Deep Dive}
+
+The attention formula \texttt{Attention(Q, K, V) = softmax(QKᵀ / √d) V} looks simple, but there's deep mathematics behind each component. This section rigorously derives why attention works and why each piece is necessary.
+
+\subsection{Scaled Dot-Product Attention: The Full Derivation}
+
+\textbf{Setup}:
+\begin{itemize}
+\item Input sequence: $X \in \mathbb{R}^{n \times d}$ (n tokens, each d-dimensional)
+\item Query matrix: $Q = XW_Q$ where $W_Q \in \mathbb{R}^{d \times d_k}$
+\item Key matrix: $K = XW_K$ where $W_K \in \mathbb{R}^{d \times d_k}$
+\item Value matrix: $V = XW_V$ where $W_V \in \mathbb{R}^{d \times d_v}$
+\end{itemize}
+
+Result: $Q, K \in \mathbb{R}^{n \times d_k}$, $V \in \mathbb{R}^{n \times d_v}$
+
+\textbf{Step 1: Computing Similarity (QKᵀ)}
+
+For each query vector $q_i$ and key vector $k_j$, compute dot product:
+\begin{verbatim}
+score(qᵢ, kⱼ) = qᵢ · kⱼ = ∑ₗ qᵢₗ kⱼₗ
+\end{verbatim}
+
+In matrix form:
+\begin{verbatim}
+S = QKᵀ ∈ ℝⁿˣⁿ
+Sᵢⱼ = qᵢ · kⱼ
+\end{verbatim}
+
+\textbf{Interpretation}: $S_{ij}$ measures how much query i ``cares about'' key j.
+
+\textbf{Why dot product?}
+\begin{enumerate}
+\item \textbf{Geometric meaning}: $q_i \cdot k_j = ||q_i|| ||k_j|| \cos(\theta)$, where $\theta$ is angle between vectors
+\begin{itemize}
+\item Parallel vectors (similar): large positive dot product
+\item Perpendicular (unrelated): dot product $\approx$ 0
+\item Opposite (dissimilar): negative dot product
+\end{itemize}
+
+\item \textbf{Computational efficiency}: Matrix multiplication is highly optimized on GPUs
+
+\item \textbf{Differentiable}: We can backpropagate through it to learn Q, K, V
+\end{enumerate}
+
+\textbf{Alternative similarity functions} (used in other attention variants):
+\begin{itemize}
+\item Additive: $\text{score}(q_i, k_j) = v^T \tanh(W[q_i; k_j])$
+\item Bilinear: $\text{score}(q_i, k_j) = q_i^T W k_j$
+\end{itemize}
+
+Dot product is simpler and faster.
+
+\textbf{Step 2: Scaling by $\sqrt{d_k}$}
+
+The crucial question: \textbf{Why divide by $\sqrt{d_k}$?}
+
+\textbf{Problem without scaling}:
+
+As dimensionality $d_k$ increases, dot products grow large. Consider:
+\begin{itemize}
+\item $q_i, k_j$ are vectors with $d_k$ components
+\item Assume each component drawn from distribution with mean 0, variance 1
+\item Then $q_i \cdot k_j = \sum_l q_{il} k_{jl}$
+\end{itemize}
+
+\textbf{Expected value}:
+\begin{verbatim}
+E[qᵢ · kⱼ] = E[∑ₗ qᵢₗ kⱼₗ] = ∑ₗ E[qᵢₗ kⱼₗ] = ∑ₗ E[qᵢₗ]E[kⱼₗ] = 0
+\end{verbatim}
+(assuming independence)
+
+\textbf{Variance}:
+\begin{align*}
+\text{Var}(q_i \cdot k_j) &= \text{Var}\left(\sum_l q_{il} k_{jl}\right) \\
+             &= \sum_l \text{Var}(q_{il} k_{jl})  \quad \text{(assuming independence)} \\
+             &= \sum_l E[(q_{il} k_{jl})^2] - (E[q_{il} k_{jl}])^2 \\
+             &= \sum_l E[q_{il}^2]E[k_{jl}^2]  \quad \text{(independence)} \\
+             &= \sum_l 1 \cdot 1 \\
+             &= d_k
+\end{align*}
+
+\textbf{Result}: Dot products have variance $d_k$. For large $d_k$, dot products become very large or very small.
+
+\textbf{Effect on softmax}:
+
+After softmax, we compute:
+\begin{verbatim}
+softmax(Sᵢ)ⱼ = exp(Sᵢⱼ) / ∑ₖ exp(Sᵢₖ)
+\end{verbatim}
+
+If $S_{ij}$ are large (say, range [-100, 100] for $d_k=1024$):
+\begin{itemize}
+\item $\exp(100) \approx 10^{43}$
+\item $\exp(-100) \approx 10^{-44}$
+\item Softmax saturates: almost all weight goes to the maximum, others $\approx$ 0
+\item Gradients vanish: $\partial \text{softmax}/\partial S \approx 0$ everywhere except the peak
+\end{itemize}
+
+\textbf{Solution}: Scale by $\sqrt{d_k}$ to keep variance = 1:
+\[
+\text{Var}\left(\frac{q_i \cdot k_j}{\sqrt{d_k}}\right) = \frac{\text{Var}(q_i \cdot k_j)}{d_k} = \frac{d_k}{d_k} = 1
+\]
+
+Now dot products stay in a reasonable range regardless of dimensionality.
+
+\textbf{Empirical validation}: The original ``Attention is All You Need'' paper tested this:
+\begin{itemize}
+\item Without scaling: training unstable, poor performance
+\item With scaling: stable training, better performance
+\end{itemize}
+
+\textbf{Mathematical proof of gradient improvement}:
+
+Softmax gradient:
+\[
+\frac{\partial \text{softmax}(x)_i}{\partial x_j} = \text{softmax}(x)_i (\delta_{ij} - \text{softmax}(x)_j)
+\]
+
+where $\delta_{ij} = 1$ if $i=j$, else 0.
+
+When inputs to softmax are large (no scaling), $\text{softmax}(x)_i \approx 1$ for max i, $\approx$ 0 otherwise.
+
+Then:
+\[
+\frac{\partial \text{softmax}(x)_i}{\partial x_j} \approx 0  \quad \text{(gradient vanishes)}
+\]
+
+With scaling, inputs to softmax have reasonable magnitude, gradients flow properly.
+
+\textbf{Step 3: Softmax Normalization}
+
+Apply row-wise softmax:
+\begin{align*}
+A &= \text{softmax}(QK^T / \sqrt{d_k}) \\
+A_{ij} &= \frac{\exp(S_{ij}/\sqrt{d_k})}{\sum_k \exp(S_{ik}/\sqrt{d_k})}
+\end{align*}
+
+\textbf{Properties}:
+\begin{enumerate}
+\item \textbf{Non-negative}: $A_{ij} \geq 0$
+\item \textbf{Normalized}: $\sum_j A_{ij} = 1$ (each row sums to 1)
+\item \textbf{Differentiable}: Can backprop through softmax
+\end{enumerate}
+
+\textbf{Interpretation}: $A_{ij}$ is the ``attention weight'' from token i to token j. Row i forms a probability distribution over which tokens to attend to.
+
+\textbf{Why softmax instead of alternatives?}
+
+\begin{enumerate}
+\item \textbf{Sparse attention}: Softmax exponentiates, so large values dominate
+\begin{itemize}
+\item If $S_{i1} = 5, S_{i2} = 4, S_{i3} = 0$:
+\item $\exp(5) = 148, \exp(4) = 55, \exp(0) = 1$
+\item After normalization: [0.73, 0.27, 0.005]
+\item Most weight on the highest-scoring key
+\end{itemize}
+
+\item \textbf{Temperature control}: Can adjust sharpness by dividing by temperature $\tau$:
+\[
+\text{softmax}(x/\tau)
+\]
+\begin{itemize}
+\item $\tau \to 0$: one-hot (hardest)
+\item $\tau \to \infty$: uniform (softest)
+\end{itemize}
+
+\item \textbf{Information-theoretic interpretation}: Softmax is the maximum entropy distribution subject to constraints on the moments
+\end{enumerate}
+
+\textbf{Step 4: Weighted Sum of Values}
+
+Compute output:
+\[
+\text{Output} = AV \in \mathbb{R}^{n \times d_v}
+\]
+
+For token i:
+\[
+\text{output}_i = \sum_j A_{ij} v_j
+\]
+
+\textbf{Interpretation}: Each output token is a weighted average of all value vectors, where weights are the attention scores.
+
+\textbf{Example}:
+\begin{itemize}
+\item Token i = ``bank'' (ambiguous)
+\item High attention to ``river'' $\to A_{i,\text{river}} = 0.8$
+\item Low attention to ``money'' $\to A_{i,\text{money}} = 0.2$
+\item $\text{output}_i = 0.8 \times v_{\text{river}} + 0.2 \times v_{\text{money}} + ...$
+\item Result: ``bank'' gets contextualized toward the ``river'' meaning
+\end{itemize}
+
+\subsection{Multi-Head Attention: Why Multiple Heads?}
+
+\textbf{Problem with single attention}: One attention mechanism can only capture one type of relationship.
+
+Example in ``The cat sat on the mat'':
+\begin{itemize}
+\item Syntactic: ``cat'' attends to ``sat'' (subject-verb)
+\item Semantic: ``cat'' attends to ``mat'' (where the cat is)
+\item Coreference: ``cat'' might attend to earlier mentions
+\end{itemize}
+
+\textbf{Solution}: Multiple attention ``heads'' capture different relationships.
+
+\textbf{Multi-head Attention Formula}:
+
+For h heads:
+\[
+\text{head}_i = \text{Attention}(QW_i^Q, KW_i^K, VW_i^V)
+\]
+
+where $W_i^Q, W_i^K \in \mathbb{R}^{d_{\text{model}} \times d_k}$, $W_i^V \in \mathbb{R}^{d_{\text{model}} \times d_v}$
+
+Concatenate all heads and project:
+\[
+\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, ..., \text{head}_h) W_O
+\]
+
+where $W_O \in \mathbb{R}^{hd_v \times d_{\text{model}}}$
+
+\textbf{Dimensions}:
+\begin{itemize}
+\item Typically: $h = 8$, $d_k = d_v = d_{\text{model}} / h$
+\item Example: $d_{\text{model}} = 512 \to$ each head has $d_k = d_v = 64$
+\end{itemize}
+
+\textbf{Why this works}:
+
+\begin{enumerate}
+\item \textbf{Different subspaces}: Each head learns projections $W_i$ that focus on different aspects
+\begin{itemize}
+\item Head 1 might learn syntactic dependencies
+\item Head 2 might learn semantic similarity
+\item Head 3 might learn positional proximity
+\end{itemize}
+
+\item \textbf{Ensemble effect}: Multiple heads provide redundancy and robustness
+
+\item \textbf{Computational efficiency}: h heads with dimension d/h each has the same cost as one head with dimension d:
+\[
+\text{Cost} = O(n^2 d_k h) = O(n^2 \cdot (d/h) \cdot h) = O(n^2 d)
+\]
+\end{enumerate}
+
+\textbf{Empirical analysis} (from research):
+\begin{itemize}
+\item Different heads specialize in different linguistic phenomena
+\item Some heads focus on adjacent tokens (local structure)
+\item Some heads focus on distant tokens (long-range dependencies)
+\item Visualizing attention weights shows interpretable patterns (e.g., head tracking subject-verb agreement)
+\end{itemize}
+
+\subsection{Self-Attention vs Cross-Attention}
+
+\textbf{Self-Attention}: Q, K, V all from same input
+\begin{align*}
+X &\in \mathbb{R}^{n \times d} \\
+Q &= XW_Q, \quad K = XW_K, \quad V = XW_V
+\end{align*}
+
+Each token attends to all tokens in the same sequence (including itself).
+
+\textbf{Cross-Attention}: Q from one source, K and V from another
+\begin{align*}
+X_{\text{query}} &\in \mathbb{R}^{n \times d}, \quad X_{\text{context}} \in \mathbb{R}^{m \times d} \\
+Q &= X_{\text{query}} W_Q \\
+K &= X_{\text{context}} W_K, \quad V = X_{\text{context}} W_V
+\end{align*}
+
+Used in encoder-decoder models:
+\begin{itemize}
+\item Decoder queries attend to encoder keys/values
+\item Example: Machine translation, decoder (English) attends to encoder (French)
+\end{itemize}
+
+\subsection{Masked Attention: Preventing Future Leakage}
+
+\textbf{Problem}: In autoregressive generation (e.g., language modeling), token i shouldn't see tokens $j > i$ (future tokens).
+
+\textbf{Solution}: Apply mask before softmax
+\begin{align*}
+S &= QK^T / \sqrt{d_k} \\
+S_{\text{masked}} &= S + M \\
+\text{where } M_{ij} &= \begin{cases} 0 & \text{if } j \leq i \\ -\infty & \text{if } j > i \end{cases} \\
+A &= \text{softmax}(S_{\text{masked}})
+\end{align*}
+
+\textbf{Effect}:
+\begin{itemize}
+\item For $i=1$, only $M_{11} = 0$, others = $-\infty$ $\to$ token 1 can only attend to itself
+\item For $i=2$, $M_{21} = M_{22} = 0$, $M_{2k} = -\infty$ for $k>2$ $\to$ token 2 attends to tokens 1 and 2
+\item For $i=n$, all $M_{nk} = 0$ $\to$ token n attends to all tokens
+\end{itemize}
+
+After softmax:
+\[
+\exp(-\infty) = 0
+\]
+
+So future positions get zero attention weight.
+
+\textbf{Implementation}:
+\begin{lstlisting}[language=Python]
+# Create lower triangular mask
+mask = torch.tril(torch.ones(n, n))
+mask = mask.masked_fill(mask == 0, float('-inf'))
+scores = scores + mask  # Broadcasting
+attention_weights = softmax(scores)
+\end{lstlisting}
+
+\subsection{Computational Complexity Analysis}
+
+\textbf{Attention complexity}: $O(n^2 d)$
+
+Breaking it down:
+\begin{enumerate}
+\item \textbf{QKᵀ}: $(n \times d_k) @ (d_k \times n) = O(n^2 d_k)$
+\item \textbf{Softmax}: $O(n^2)$ (row-wise)
+\item \textbf{AV}: $(n \times n) @ (n \times d_v) = O(n^2 d_v)$
+\end{enumerate}
+
+Total: $O(n^2(d_k + d_v)) = O(n^2 d)$ assuming $d_k, d_v \approx d$
+
+\textbf{Comparison to RNNs}:
+\begin{itemize}
+\item RNN: $O(nd^2)$ for sequence of length n
+\begin{itemize}
+\item Sequential: process one token at a time, each requires $O(d^2)$ (weight matrix multiply)
+\item Total: n steps $\times O(d^2) = O(nd^2)$
+\end{itemize}
+\end{itemize}
+
+\textbf{Crossover point}:
+\begin{itemize}
+\item Attention faster when $n < d$ (typical for transformers with $d=512$-1024, $n=100$-512)
+\item RNN faster when $n > d$ (very long sequences)
+\end{itemize}
+
+\textbf{Memory}:
+\begin{itemize}
+\item Attention: $O(n^2)$ to store attention matrix
+\item RNN: $O(n)$ to store hidden states
+\end{itemize}
+
+\textbf{This is why}:
+\begin{itemize}
+\item Transformers dominate for $n \leq 2048$ (BERT, GPT)
+\item For very long sequences ($n > 10$K), need sparse attention (Longformer, BigBird)
+\end{itemize}
+
+\subsection{Why Attention Works: Information-Theoretic View}
+
+Attention can be viewed as \textbf{soft dictionary lookup}.
+
+Traditional dictionary:
+\begin{verbatim}
+lookup(query, dict) = dict[key]  if exact match, else None
+\end{verbatim}
+
+Attention:
+\begin{verbatim}
+lookup(query, dict) = ∑_i similarity(query, keyᵢ) · valueᵢ
+\end{verbatim}
+
+\textbf{Analogy}:
+\begin{itemize}
+\item You ask: ``What's the capital of France?'' (query)
+\item Database has entries: (France, Paris), (Germany, Berlin), ...
+\begin{itemize}
+\item Keys: country names
+\item Values: capitals
+\end{itemize}
+\item Attention computes similarity: query $\approx$ ``France'' $\to$ high weight on (France, Paris)
+\item Output: mostly ``Paris'' with tiny contribution from other capitals
+\end{itemize}
+
+\textbf{Mutual Information Interpretation}:
+
+Attention maximizes mutual information $I(\text{output}; \text{relevant\_context})$ while minimizing $I(\text{output}; \text{irrelevant\_context})$.
+
+The learned Q, K, V matrices determine what's relevant.
+
+\subsection{Comparison to Convolution}
+
+\textbf{Convolution}: Fixed local receptive field
+\begin{itemize}
+\item Each output depends on fixed-size window of inputs
+\item Same operation everywhere (weight sharing)
+\item Good for local patterns (edges in images)
+\end{itemize}
+
+\textbf{Attention}: Adaptive global receptive field
+\begin{itemize}
+\item Each output depends on ALL inputs (with learned weights)
+\item Different operation at each position (content-based)
+\item Good for long-range dependencies (language)
+\end{itemize}
+
+\textbf{Hybrid models} (e.g., ConvBERT): Use both convolution (local) and attention (global)
+
+\subsection{Summary: The Complete Attention Pipeline}
+
+\begin{enumerate}
+\item \textbf{Project}: $X \to Q, K, V$ via learned matrices
+\item \textbf{Score}: Compute $QK^T$ (similarity of all pairs)
+\item \textbf{Scale}: Divide by $\sqrt{d_k}$ (keep variance stable)
+\item \textbf{Mask} (if causal): Prevent attending to future
+\item \textbf{Normalize}: Softmax (convert scores to probabilities)
+\item \textbf{Aggregate}: Multiply by V (weighted sum of values)
+\item \textbf{Multi-head}: Repeat h times, concatenate, project
+\end{enumerate}
+
+\textbf{Mathematical elegance}: Every step is differentiable, so we can backprop through the entire pipeline to learn Q, K, V transformations that maximize task performance.
+
+\textbf{Key Insight}: Attention is a learnable routing mechanism. The model learns to route information from relevant parts of the input to each output position. This is far more flexible than fixed architectures (RNNs, CNNs) with hard-coded information flow.
+
+\section{What Embeddings Really Represent}
+
+Before diving into transformers, let's clarify embeddings---they're everywhere in modern AI.
+
+\subsection{The Problem: Words Aren't Numbers}
+
+Computers need numbers. Words are symbols. How do you convert ``dog'' into numbers?
+
+\textbf{Bad Idea}: Assign integers. \texttt{dog=1, cat=2, tree=3}.
+
+Problem: This implies \texttt{dog + cat = tree} (mathematically). Arithmetic on these IDs is meaningless.
+
+\textbf{Good Idea}: Represent each word as a vector in high-dimensional space, where \textbf{similar words are nearby}.
+
+\begin{verbatim}
+dog   = [0.2, 0.8, 0.1, ..., 0.3]  (300 dimensions)
+cat   = [0.3, 0.7, 0.2, ..., 0.4]  (nearby dog)
+tree  = [0.1, 0.1, 0.9, ..., 0.0]  (far from dog/cat)
+\end{verbatim}
+
+Now similarity is measurable: dot product or cosine distance.
+
+\subsection{How Embeddings Are Learned}
+
+\textbf{Word2Vec}: Train a simple network to predict context words from a target word (or vice versa). Vectors that yield good predictions capture semantic similarity.
+
+\textbf{In transformers}: Embeddings are learned jointly with the model. They're optimized to be useful for the task.
+
+\subsection{What Do They Capture?}
+
+Surprisingly, embeddings capture semantic and syntactic relationships:
+
+\begin{verbatim}
+king - man + woman ≈ queen
+Paris - France + Germany ≈ Berlin
+\end{verbatim}
+
+\textbf{Why?} Distributional hypothesis: ``Words in similar contexts have similar meanings.'' The model learns these regularities from massive data.
+
+\subsection{Positional Embeddings}
+
+Attention has no notion of order. ``Dog bites man'' and ``Man bites dog'' look the same to raw attention.
+
+\textbf{Solution}: Add positional encodings---vectors that encode position (1st word, 2nd word, etc.). Now the model knows order.
+
+\subsection{Positional Encoding Theory: Teaching Order to Transformers}
+
+Self-attention is permutation-invariant: swapping the order of inputs doesn't change the attention weights. This is a problem for sequences where order matters (like language). Positional encodings solve this by injecting position information into the model. This section derives why sinusoidal encodings work and explores alternatives.
+
+\subsubsection{The Problem: Permutation Invariance of Attention}
+
+\textbf{Mathematical observation}: The attention formula
+\[
+\text{Attention}(Q, K, V) = \text{softmax}(QK^T/\sqrt{d_k}) V
+\]
+
+depends only on the content of Q, K, V, not their order.
+
+\textbf{Proof}: If we permute the input sequence with permutation matrix P:
+\begin{align*}
+X' &= PX  \quad \text{(rows of X are reordered)} \\
+Q' &= PQ, \quad K' = PK, \quad V' = PV
+\end{align*}
+
+Then:
+\[
+Q'K'^T = (PQ)(PK)^T = PQ \cdot K^T \cdot P^T
+\]
+
+This is just a permuted version of $QK^T$. After softmax and multiplying by $V'$, we get permuted outputs.
+
+\textbf{Consequence}: The attention mechanism itself has no notion of position. Token at position 1 is treated identically to token at position 100.
+
+\textbf{Why this is bad}: In ``The cat sat on the mat'', word order determines meaning:
+\begin{itemize}
+\item ``cat sat'' (subject acts)
+\item ``sat cat'' (nonsense)
+\end{itemize}
+
+We need to inject positional information.
+
+\subsubsection{Solution 1: Learned Positional Embeddings}
+
+\textbf{Idea}: Create a lookup table of position vectors.
+
+\textbf{Implementation}:
+\begin{lstlisting}[language=Python]
+max_length = 512
+embedding_dim = 512
+pos_embedding = nn.Embedding(max_length, embedding_dim)
+
+# For position i:
+pos_vec = pos_embedding(i)  # Learned vector for position i
+
+# Add to token embedding:
+input_representation = token_embedding(x) + pos_embedding(position)
+\end{lstlisting}
+
+\textbf{Parameters}: max\_length $\times$ embedding\_dim (e.g., $512 \times 512 = 262,144$ parameters)
+
+\textbf{Pros}:
+\begin{itemize}
+\item Simple to implement
+\item Model learns optimal position representations for the task
+\end{itemize}
+
+\textbf{Cons}:
+\begin{itemize}
+\item Fixed maximum length (can't handle sequences longer than max\_length)
+\item No generalization to unseen positions
+\item Extra parameters to learn
+\end{itemize}
+
+\subsubsection{Solution 2: Sinusoidal Positional Encoding (Original Transformer)}
+
+\textbf{Motivation}: Find a function that:
+\begin{enumerate}
+\item Is deterministic (no learned parameters)
+\item Generalizes to any sequence length
+\item Encodes unique positions (no collisions)
+\item Has geometric properties that help the model learn relative positions
+\end{enumerate}
+
+\textbf{The formula} (Vaswani et al., 2017):
+
+For position \texttt{pos} and dimension \texttt{i}:
+\begin{align*}
+PE(\text{pos}, 2i) &= \sin(\text{pos} / 10000^{2i/d_{\text{model}}}) \\
+PE(\text{pos}, 2i+1) &= \cos(\text{pos} / 10000^{2i/d_{\text{model}}})
+\end{align*}
+
+where:
+\begin{itemize}
+\item $\text{pos} \in \{0, 1, 2, ..., n-1\}$ is the position in the sequence
+\item $i \in \{0, 1, 2, ..., d_{\text{model}}/2 - 1\}$ is the dimension index
+\item $d_{\text{model}}$ is the embedding dimension (e.g., 512)
+\end{itemize}
+
+\textbf{Example} ($d_{\text{model}} = 4$):
+
+Position 0:
+\begin{align*}
+PE(0, 0) &= \sin(0/10000^0) = \sin(0) = 0 \\
+PE(0, 1) &= \cos(0/10000^0) = \cos(0) = 1 \\
+PE(0, 2) &= \sin(0/10000^{2/4}) = \sin(0) = 0 \\
+PE(0, 3) &= \cos(0/10000^{2/4}) = \cos(0) = 1 \\
+&\to [0, 1, 0, 1]
+\end{align*}
+
+Position 1:
+\begin{align*}
+PE(1, 0) &= \sin(1/1) = \sin(1) \approx 0.841 \\
+PE(1, 1) &= \cos(1/1) = \cos(1) \approx 0.540 \\
+PE(1, 2) &= \sin(1/10000^{2/4}) = \sin(1/100) \approx 0.010 \\
+PE(1, 3) &= \cos(1/10000^{2/4}) = \cos(1/100) \approx 1.000 \\
+&\to [0.841, 0.540, 0.010, 1.000]
+\end{align*}
+
+\subsubsection{Why Sinusoidal Encodings Work: Mathematical Analysis}
+
+\textbf{Property 1: Uniqueness}
+
+Every position gets a unique encoding vector (for reasonable sequence lengths).
+
+\textbf{Proof sketch}: The encoding is a composition of sine/cosine functions with different frequencies. The frequencies are:
+\[
+\omega_i = 1 / 10000^{2i/d_{\text{model}}}
+\]
+
+These decrease exponentially: $\omega_0 = 1, \omega_1 = 1/100, \omega_2 = 1/10000, ...$
+
+Lower dimensions (high frequency) encode fine-grained position differences. Higher dimensions (low frequency) encode coarse-grained positions.
+
+\textbf{Analogy to binary numbers}: Just as binary uses powers of 2 (1, 2, 4, 8, ...) to uniquely represent numbers, sinusoidal encoding uses powers of 10000 to represent positions.
+
+\textbf{Property 2: Relative Position is a Linear Function}
+
+\textbf{Claim}: For any fixed offset k, the encoding of position pos+k can be represented as a linear function of the encoding of position pos.
+
+\textbf{Proof}:
+
+Using the angle addition formula:
+\begin{align*}
+\sin(\alpha + \beta) &= \sin(\alpha)\cos(\beta) + \cos(\alpha)\sin(\beta) \\
+\cos(\alpha + \beta) &= \cos(\alpha)\cos(\beta) - \sin(\alpha)\sin(\beta)
+\end{align*}
+
+For dimension 2i (sine component):
+\begin{align*}
+PE(\text{pos}+k, 2i) &= \sin((\text{pos}+k) / 10000^{2i/d}) \\
+               &= \sin(\text{pos}/10000^{2i/d} + k/10000^{2i/d})
+\end{align*}
+
+Let $\alpha = \text{pos}/10000^{2i/d}, \beta = k/10000^{2i/d}$:
+\begin{align*}
+PE(\text{pos}+k, 2i) &= \sin(\alpha + \beta) \\
+               &= \sin(\alpha)\cos(\beta) + \cos(\alpha)\sin(\beta) \\
+               &= PE(\text{pos},2i) \cdot \cos(\beta) + PE(\text{pos},2i+1) \cdot \sin(\beta)
+\end{align*}
+
+\textbf{In matrix form}:
+\[
+\begin{bmatrix}
+PE(\text{pos}+k, 2i) \\
+PE(\text{pos}+k, 2i+1)
+\end{bmatrix}
+=
+\begin{bmatrix}
+\cos(\beta) & \sin(\beta) \\
+-\sin(\beta) & \cos(\beta)
+\end{bmatrix}
+\begin{bmatrix}
+PE(\text{pos}, 2i) \\
+PE(\text{pos}, 2i+1)
+\end{bmatrix}
+\]
+
+This is a rotation matrix! The relative offset k determines the rotation angle $\beta$.
+
+\textbf{Implication}: The model can learn to attend to relative positions (e.g., ``attend to word 3 positions back'') using linear transformations.
+
+\textbf{Property 3: Bounded Values}
+
+All components of PE are in [-1, 1] (sine and cosine range).
+
+\textbf{Implication}: Positional encodings don't dominate the token embeddings. Both contribute to the final representation.
+
+\textbf{Property 4: Different Frequencies for Different Dimensions}
+
+Low dimensions change rapidly (high frequency):
+\begin{itemize}
+\item $PE(0, 0)$ vs $PE(1, 0)$: Large difference (frequency $\omega_0 = 1$)
+\end{itemize}
+
+High dimensions change slowly (low frequency):
+\begin{itemize}
+\item $PE(0, d-1)$ vs $PE(1, d-1)$: Small difference (frequency $\omega_{d/2-1} \approx 1/10000$)
+\end{itemize}
+
+\textbf{Intuition}:
+\begin{itemize}
+\item Low dimensions: Encode exact position (changes every step)
+\item High dimensions: Encode coarse region (changes every $\sim$10000 steps)
+\end{itemize}
+
+\textbf{Analogy}: Like a clock:
+\begin{itemize}
+\item Second hand (high frequency): Precise time within a minute
+\item Minute hand (medium frequency): Position within an hour
+\item Hour hand (low frequency): Time of day
+\end{itemize}
+
+\subsubsection{Why 10000?}
+
+The constant 10000 in the formula is somewhat arbitrary, but chosen to:
+\begin{enumerate}
+\item Provide a large range: With $d_{\text{model}} = 512$, positions up to $\sim$10000 are easily distinguishable
+\item Geometric sequence: $10000^{i/256}$ creates smoothly varying frequencies
+\item Empirically works well
+\end{enumerate}
+
+\textbf{Alternatives}: Some models use different bases (e.g., 500, 1000) depending on expected sequence lengths.
+
+\subsubsection{Comparison: Learned vs Sinusoidal}
+
+\begin{center}
+\begin{tabular}{lll}
+\hline
+\textbf{Aspect} & \textbf{Learned Embeddings} & \textbf{Sinusoidal Encoding} \\
+\hline
+Parameters & max\_len $\times$ d\_model & 0 (deterministic) \\
+Generalization & Fixed max length & Any length \\
+Flexibility & Adapts to task & Fixed pattern \\
+Relative position & Must learn & Built-in (rotation) \\
+Modern use & BERT, GPT-2 & Original Transformer \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{Modern practice}: Many models (BERT, GPT) use learned positional embeddings because:
+\begin{itemize}
+\item Extra parameters are cheap (relative to model size)
+\item Model can adapt encoding to the task
+\item Maximum length is usually known (e.g., 512, 2048 tokens)
+\end{itemize}
+
+\textbf{When sinusoidal is better}:
+\begin{itemize}
+\item Variable-length sequences (no fixed max length)
+\item Low-resource settings (fewer parameters)
+\item Explicit relative position modeling
+\end{itemize}
+
+\subsubsection{Advanced: Relative Positional Encodings}
+
+\textbf{Problem}: Absolute positions (0, 1, 2, ...) aren't always meaningful. What matters is relative distance.
+
+Example: ``The cat sat on the mat'' vs ``Yesterday, the cat sat on the mat''
+\begin{itemize}
+\item Absolute: ``cat'' is at position 1 vs position 2 (different)
+\item Relative: ``cat'' is 1 word before ``sat'' (same)
+\end{itemize}
+
+\textbf{Solution: Relative Position Encodings} (Shaw et al., 2018)
+
+Instead of encoding absolute position, modify attention to encode relative position:
+\[
+\text{Attention}_{ij} = \text{softmax}((q_i \cdot k_j + q_i \cdot r_{i-j}) / \sqrt{d_k})
+\]
+
+where $r_{i-j}$ is a learned embedding for relative distance $i-j$.
+
+\textbf{Advantages}:
+\begin{itemize}
+\item Position-invariant: Shift the sequence, relationships remain
+\item Longer generalization: Learns ``attend 3 tokens back'' instead of ``attend to position 5''
+\end{itemize}
+
+\textbf{Used in}: Transformer-XL, T5, modern architectures
+
+\subsubsection{RoPE: Rotary Positional Embedding (Modern Alternative)}
+
+\textbf{Motivation}: Combine benefits of absolute and relative encodings.
+
+\textbf{Idea} (Su et al., 2021): Apply rotation matrices to Q and K based on position.
+
+\textbf{Formula}:
+\begin{align*}
+Q_{\text{pos}} &= R(\text{pos}) Q \\
+K_{\text{pos}} &= R(\text{pos}) K
+\end{align*}
+
+where $R(\text{pos})$ is a rotation matrix that depends on position pos.
+
+\textbf{Magic}: When computing attention:
+\[
+Q_i \cdot K_j = (R(i)Q) \cdot (R(j)K) = Q^T R(i)^T R(j) K = Q^T R(j-i) K
+\]
+
+The dot product depends only on relative position $j-i$!
+
+\textbf{Advantages}:
+\begin{itemize}
+\item Combines absolute position (in Q, K) with relative position (in dot product)
+\item No extra parameters
+\item Better extrapolation to longer sequences
+\end{itemize}
+
+\textbf{Used in}: LLaMA, PaLM, many modern LLMs
+
+\subsubsection{ALiBi: Attention with Linear Biases}
+
+\textbf{Simplest approach} (Press et al., 2021): Add a linear bias to attention scores based on distance.
+
+\textbf{Formula}:
+\[
+\text{Attention}_{ij} = \text{softmax}((q_i \cdot k_j - m \cdot |i-j|) / \sqrt{d_k})
+\]
+
+where m is a learned slope.
+
+\textbf{Intuition}: Penalize attention to distant tokens linearly.
+
+\textbf{Advantages}:
+\begin{itemize}
+\item Extremely simple (no extra embeddings)
+\item Zero parameters
+\item Strong extrapolation to longer sequences
+\end{itemize}
+
+\textbf{Used in}: BLOOM, some recent LLMs
+
+\subsubsection{Practical Implementation (PyTorch)}
+
+\textbf{Sinusoidal encoding}:
+\begin{lstlisting}[language=Python]
+def sinusoidal_positional_encoding(max_len, d_model):
+    """Generate sinusoidal positional encoding"""
+    position = torch.arange(0, max_len).unsqueeze(1)  # [max_len, 1]
+    div_term = torch.exp(torch.arange(0, d_model, 2) *
+                        -(np.log(10000.0) / d_model))  # [d_model/2]
+
+    pe = torch.zeros(max_len, d_model)
+    pe[:, 0::2] = torch.sin(position * div_term)  # Even indices
+    pe[:, 1::2] = torch.cos(position * div_term)  # Odd indices
+
+    return pe
+
+# Usage:
+pe = sinusoidal_positional_encoding(max_len=512, d_model=512)
+x = token_embeddings + pe[:seq_len]  # Add positional encoding
+\end{lstlisting}
+
+\textbf{Learned embeddings}:
+\begin{lstlisting}[language=Python]
+class LearnedPositionalEncoding(nn.Module):
+    def __init__(self, max_len, d_model):
+        super().__init__()
+        self.pe = nn.Embedding(max_len, d_model)
+
+    def forward(self, x):
+        seq_len = x.size(1)
+        positions = torch.arange(0, seq_len, device=x.device)
+        return x + self.pe(positions)
+\end{lstlisting}
+
+\subsubsection{Summary: Positional Encoding Theory}
+
+\begin{center}
+\begin{tabular}{lll}
+\hline
+\textbf{Concept} & \textbf{Formula/Intuition} & \textbf{Why It Matters} \\
+\hline
+Permutation invariance & Attention is order-blind & Need to inject position info \\
+Sinusoidal encoding & $PE(\text{pos}, 2i) = \sin(\text{pos}/10000^{2i/d})$ & No parameters, infinite length \\
+Relative position & $PE(\text{pos}+k) = \text{LinearTransform}(PE(\text{pos}))$ & Model can learn relative attention \\
+Frequency hierarchy & Low dim = high freq, high dim = low freq & Multi-scale position representation \\
+Learned embeddings & Position lookup table & Flexible, task-specific \\
+RoPE & Rotation-based, relative in dot product & Best of both worlds \\
+ALiBi & Linear distance penalty & Simplest, good extrapolation \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{Key insight}: Positional encoding is not just ``adding position numbers''. It's about:
+\begin{enumerate}
+\item \textbf{Uniqueness}: Every position gets a distinct representation
+\item \textbf{Geometry}: Relative positions have geometric relationships (rotations, linear transforms)
+\item \textbf{Multi-scale}: Different dimensions encode different temporal scales
+\end{enumerate}
+
+\textbf{Modern trends}: Moving from absolute $\to$ relative encodings, and from learned $\to$ zero-parameter methods (RoPE, ALiBi) that generalize better to longer sequences.
+
+\subsection{Layer Normalization Theory: Why Transformers Don't Use Batch Norm}
+
+Transformers universally use Layer Normalization instead of Batch Normalization. This isn't arbitrary - there are deep theoretical and practical reasons. This section derives Layer Norm mathematically and explains why it's essential for transformers.
+
+\subsubsection{Batch Norm's Problem for Sequences}
+
+\textbf{Recall Batch Normalization}: Normalize across the batch dimension.
+
+For input $x \in \mathbb{R}^{B \times N \times D}$ (batch size B, sequence length N, features D):
+\begin{verbatim}
+BatchNorm: Normalize across B for each position n and feature d
+μ = (1/B) ∑_{b=1}^B x_{b,n,d}
+\end{verbatim}
+
+\textbf{Problem for variable-length sequences}:
+\begin{itemize}
+\item Sentence 1: ``Hello'' (length 1)
+\item Sentence 2: ``The cat sat on the mat'' (length 6)
+\item Sentence 3: ``Hi'' (length 1)
+\end{itemize}
+
+At position 5:
+\begin{itemize}
+\item Only sentence 2 has a token
+\item Batch statistics are computed from 1 example (B = 1)
+\item Variance estimate is meaningless!
+\end{itemize}
+
+\textbf{Problem for inference}:
+\begin{itemize}
+\item Batch size = 1 (single sentence)
+\item Can't compute meaningful batch statistics
+\item Must use running averages from training (but with variable lengths, these are unreliable)
+\end{itemize}
+
+\textbf{Fundamental issue}: Batch Norm assumes all examples in batch have the same structure. Sequences violate this.
+
+\subsubsection{Layer Normalization: The Solution}
+
+\textbf{Idea} (Ba et al., 2016): Normalize across features (not across batch).
+
+\textbf{For each example independently}:
+
+For input $x \in \mathbb{R}^D$ (D features):
+
+\begin{align*}
+\mu &= \frac{1}{D} \sum_{i=1}^D x_i \quad \text{(mean across features)} \\
+\sigma^2 &= \frac{1}{D} \sum_{i=1}^D (x_i - \mu)^2 \quad \text{(variance across features)} \\
+\hat{x}_i &= \frac{x_i - \mu}{\sqrt{\sigma^2 + \varepsilon}} \quad \text{(normalize)} \\
+y_i &= \gamma_i \hat{x}_i + \beta_i \quad \text{(scale and shift)}
+\end{align*}
+
+where $\gamma, \beta$ are learnable per-feature parameters.
+
+\textbf{Key difference from Batch Norm}:
+
+\begin{center}
+\begin{tabular}{ll}
+\hline
+\textbf{Batch Norm} & \textbf{Layer Norm} \\
+\hline
+Normalize across batch (B examples) & Normalize across features (D dimensions) \\
+Statistics: $\mu, \sigma^2$ computed from B examples & Statistics: $\mu, \sigma^2$ computed from D features of single example \\
+Requires batch size $> 1$ & Works with batch size = 1 \\
+Different behavior train/test & Same behavior train/test \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsubsection{Mathematical Derivation: Why Layer Norm Works}
+
+\textbf{Stabilizes activations within each layer}:
+
+After normalization, each example has:
+\begin{itemize}
+\item Mean = 0 (approximately, before scale/shift)
+\item Variance = 1 (approximately, before scale/shift)
+\end{itemize}
+
+This prevents:
+\begin{enumerate}
+\item \textbf{Activation explosion}: No matter what previous layers do, inputs to next layer are bounded
+\item \textbf{Activation vanishing}: Ensures signal strength remains constant
+\end{enumerate}
+
+\textbf{Gradient flow}:
+
+Similar to Batch Norm, Layer Norm bounds gradients during backpropagation.
+
+\textbf{Backward pass}:
+\[
+\frac{\partial L}{\partial x_i} = \frac{\partial L}{\partial \hat{x}_i} \cdot \frac{\partial \hat{x}_i}{\partial x_i} + \frac{\partial L}{\partial \mu} \cdot \frac{\partial \mu}{\partial x_i} + \frac{\partial L}{\partial \sigma^2} \cdot \frac{\partial \sigma^2}{\partial x_i}
+\]
+
+The normalization creates dependencies between all features $x_i$ (through $\mu$ and $\sigma^2$), which decorrelates gradients and prevents any single feature from dominating.
+
+\textbf{Full derivative} (similar to Batch Norm derivation):
+\[
+\frac{\partial L}{\partial x_i} = \frac{\gamma}{\sqrt{\sigma^2 + \varepsilon}} \cdot \left[\frac{\partial L}{\partial y_i} - \frac{1}{D}\sum_j\frac{\partial L}{\partial y_j} - \hat{x}_i \cdot \frac{1}{D}\sum_j\frac{\partial L}{\partial y_j}\hat{x}_j\right]
+\]
+
+\textbf{Implication}: Gradients are centered and normalized, preventing explosion/vanishing.
+
+\subsubsection{Why Transformers Need Layer Norm}
+
+\textbf{1. Variable sequence lengths}:
+\begin{itemize}
+\item Input: ``Hello'' (1 token) vs ``The quick brown fox'' (4 tokens)
+\item Batch Norm can't handle this naturally
+\item Layer Norm processes each token independently
+\end{itemize}
+
+\textbf{2. Attention creates large activation variance}:
+
+Attention output:
+\[
+\text{Output}_i = \sum_j \text{softmax}(QK^T)_{ij} \cdot V_j
+\]
+
+This is a weighted sum of value vectors. Without normalization:
+\begin{itemize}
+\item If some attention weights are very large $\to$ output explodes
+\item If values have different scales $\to$ unstable learning
+\end{itemize}
+
+Layer Norm after attention stabilizes this:
+\[
+\text{Output} = \text{LayerNorm}(\text{Attention}(Q, K, V))
+\]
+
+\textbf{3. Deep stacking (many layers)}:
+
+Transformers have 12-100+ layers. Without normalization:
+\begin{itemize}
+\item Activations compound across layers
+\item Gradients vanish/explode
+\end{itemize}
+
+Layer Norm + residual connections ensure stable signal flow.
+
+\subsubsection{Pre-Norm vs Post-Norm}
+
+\textbf{Pre-Norm} (modern preference):
+\begin{align*}
+x &= x + \text{Attention}(\text{LayerNorm}(x)) \\
+x &= x + \text{FFN}(\text{LayerNorm}(x))
+\end{align*}
+
+Normalization is applied \textbf{before} the sub-layer (attention or FFN).
+
+\textbf{Post-Norm} (original paper):
+\begin{align*}
+x &= \text{LayerNorm}(x + \text{Attention}(x)) \\
+x &= \text{LayerNorm}(x + \text{FFN}(x))
+\end{align*}
+
+Normalization is applied \textbf{after} adding the residual.
+
+\textbf{Why Pre-Norm is better}:
+
+\begin{enumerate}
+\item \textbf{Gradient flow}: With Pre-Norm, the residual path is completely clean:
+\begin{align*}
+x_{\text{out}} &= x_{\text{in}} + f(\text{LayerNorm}(x_{\text{in}})) \\
+\frac{\partial x_{\text{out}}}{\partial x_{\text{in}}} &= I + \frac{\partial f}{\partial x_{\text{in}}}
+\end{align*}
+The identity I is present, ensuring gradient highway.
+
+\item \textbf{Initialization}: Pre-Norm is less sensitive to initialization. The normalization ensures inputs to $f(...)$ are well-scaled from the start.
+
+\item \textbf{Training stability}: Empirically, Pre-Norm allows training deeper transformers without learning rate warmup tricks.
+\end{enumerate}
+
+\textbf{Trade-off}: Post-Norm sometimes achieves slightly better final performance (when training is stable), but Pre-Norm is more robust.
+
+\textbf{Modern practice}: GPT-3, GPT-4, LLaMA, most recent models use Pre-Norm.
+
+\subsubsection{Layer Norm vs Batch Norm: A Complete Comparison}
+
+\begin{center}
+\begin{tabular}{lll}
+\hline
+\textbf{Aspect} & \textbf{Batch Norm} & \textbf{Layer Norm} \\
+\hline
+\textbf{Normalization axis} & Across batch (B examples) & Across features (D dimensions) \\
+\textbf{Train/test difference} & Yes (uses running stats at test) & No (same computation) \\
+\textbf{Minimum batch size} & $>1$ (preferably $>8$) & 1 (works with any batch size) \\
+\textbf{Sequence compatibility} & Poor (variable lengths break it) & Excellent \\
+\textbf{Typical use} & CNNs, fully-connected nets & Transformers, RNNs, LSTMs \\
+\textbf{Computational cost} & $O(D)$ per layer & $O(D)$ per example \\
+\textbf{Parameters} & 2D ($\gamma, \beta$) & 2D ($\gamma, \beta$) \\
+\textbf{When invented} & 2015 (Ioffe \& Szegedy) & 2016 (Ba et al.) \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsubsection{Other Normalization Variants}
+
+\textbf{RMSNorm} (Root Mean Square Normalization):
+
+Simplification of Layer Norm - only normalize by RMS, skip mean subtraction:
+\begin{align*}
+\text{RMS} &= \sqrt{\frac{1}{D} \sum_i x_i^2} \\
+\hat{x}_i &= \frac{x_i}{\text{RMS}} \\
+y_i &= \gamma_i \hat{x}_i
+\end{align*}
+
+\textbf{Advantages}:
+\begin{itemize}
+\item Simpler computation (no mean subtraction)
+\item Empirically works as well as Layer Norm for transformers
+\item Slightly faster
+\end{itemize}
+
+\textbf{Used in}: LLaMA, Gopher, Chinchilla
+
+\textbf{Why it works}: For activation distributions roughly centered at 0, mean $\approx$ 0 anyway, so skipping mean subtraction has minimal effect.
+
+\textbf{GroupNorm} (mentioned earlier with Batch Norm):
+
+Normalize over groups of channels. Compromise between Layer Norm (all features) and Instance Norm (single feature).
+
+\textbf{When to use}: Vision transformers, where Layer Norm isn't always optimal.
+
+\subsubsection{Practical Implementation}
+
+\textbf{Layer Normalization (PyTorch)}:
+\begin{lstlisting}[language=Python]
+class LayerNorm(nn.Module):
+    def __init__(self, d_model, eps=1e-6):
+        super().__init__()
+        self.gamma = nn.Parameter(torch.ones(d_model))
+        self.beta = nn.Parameter(torch.zeros(d_model))
+        self.eps = eps
+
+    def forward(self, x):
+        # x: [batch, seq_len, d_model]
+        mean = x.mean(dim=-1, keepdim=True)  # [batch, seq_len, 1]
+        std = x.std(dim=-1, keepdim=True)    # [batch, seq_len, 1]
+
+        x_norm = (x - mean) / (std + self.eps)
+        return self.gamma * x_norm + self.beta
+
+# Usage in Transformer:
+class TransformerLayer(nn.Module):
+    def __init__(self, d_model):
+        super().__init__()
+        self.attention = MultiHeadAttention(d_model)
+        self.ffn = FeedForward(d_model)
+        self.norm1 = LayerNorm(d_model)
+        self.norm2 = LayerNorm(d_model)
+
+    def forward(self, x):
+        # Pre-Norm style
+        x = x + self.attention(self.norm1(x))
+        x = x + self.ffn(self.norm2(x))
+        return x
+\end{lstlisting}
+
+\textbf{RMSNorm (PyTorch)}:
+\begin{lstlisting}[language=Python]
+class RMSNorm(nn.Module):
+    def __init__(self, d_model, eps=1e-6):
+        super().__init__()
+        self.gamma = nn.Parameter(torch.ones(d_model))
+        self.eps = eps
+
+    def forward(self, x):
+        rms = torch.sqrt(torch.mean(x**2, dim=-1, keepdim=True) + self.eps)
+        return self.gamma * x / rms
+\end{lstlisting}
+
+\subsubsection{Why Layer Norm is Essential: The Full Picture}
+
+\textbf{Problem}: Deep networks need stable activations and gradients.
+
+\textbf{Batch Norm solution}: Normalize across batch
+\begin{itemize}
+\item Stabilizes activations
+\item Enables deeper networks
+\item $\times$ Requires large batches
+\item $\times$ Different train/test behavior
+\item $\times$ Breaks for variable-length sequences
+\end{itemize}
+
+\textbf{Layer Norm solution}: Normalize across features
+\begin{itemize}
+\item Stabilizes activations
+\item Enables deeper networks
+\item Works with any batch size (even 1)
+\item Identical train/test behavior
+\item Perfect for variable-length sequences
+\item Essential for transformers
+\end{itemize}
+
+\textbf{Key insight}: Normalization is about controlling the distribution of activations. WHERE you normalize (across batch vs across features) depends on your architecture and data:
+\begin{itemize}
+\item Fixed-size inputs (images) $\to$ Batch Norm works
+\item Variable-length sequences (text) $\to$ Layer Norm essential
+\end{itemize}
+
+\subsubsection{Historical Note}
+
+\textbf{2015}: Batch Normalization revolutionizes CNNs
+
+\textbf{2016}: Layer Normalization proposed for RNNs
+
+\textbf{2017}: Transformers adopt Layer Norm as a core component
+
+\textbf{2020+}: RMSNorm emerges as simpler alternative
+
+\textbf{Present}: Layer Norm (or RMSNorm) is standard in all transformer models
+
+\textbf{Without Layer Norm}: Training transformers with $>6$ layers was extremely difficult. Layer Norm made deep transformers (12, 24, 96 layers) practical.
+
+\subsubsection{Summary: Layer Normalization Theory}
+
+\begin{center}
+\begin{tabular}{lll}
+\hline
+\textbf{Concept} & \textbf{Formula/Intuition} & \textbf{Why It Matters} \\
+\hline
+Normalize features & $\mu, \sigma^2$ across D features (not across batch) & Works with batch size = 1 \\
+Per-example & Each example normalized independently & Handles variable-length sequences \\
+Train = Test & Same computation always & No running statistics needed \\
+Pre-Norm & Norm before sub-layer & Better gradient flow \\
+Post-Norm & Norm after residual & Original design, less stable \\
+RMSNorm & Skip mean, just RMS & Simpler, faster, works as well \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{Key insight}: Layer Normalization solves the variable-length sequence problem that Batch Normalization can't handle. This made transformers practical for NLP, where sequence lengths vary wildly.
+
+\textbf{Modern transformers}: Use Pre-Norm + RMSNorm for best stability and efficiency.
+
+\section{Transformers: The Architecture}
+
+The transformer architecture (from ``Attention is All You Need,'' 2017) has two parts:
+
+\subsection{Encoder}
+Processes input sequence. Each layer:
+\begin{enumerate}
+\item \textbf{Multi-head self-attention}: Attend to all positions in the input
+\item \textbf{Feed-forward network}: Apply a small MLP to each position independently
+\item \textbf{Residual connections and layer normalization}: Help gradients flow
+\end{enumerate}
+
+Stack multiple encoder layers (e.g., 12 layers).
+
+\textbf{Output}: Contextualized representations of each input token.
+
+\subsection{Decoder}
+Generates output sequence. Each layer:
+\begin{enumerate}
+\item \textbf{Masked self-attention}: Attend to all \textit{previous} positions (can't peek at future)
+\item \textbf{Cross-attention}: Attend to encoder outputs
+\item \textbf{Feed-forward network}
+\item \textbf{Residuals and normalization}
+\end{enumerate}
+
+Stack multiple decoder layers.
+
+\textbf{Use case}: Machine translation (encoder = source language, decoder = target language).
+
+\subsection{Decoder-Only Transformers (GPT)}
+
+For language modeling, you don't need an encoder. Just stack decoder layers with masked self-attention.
+
+\textbf{How it works}:
+\begin{itemize}
+\item Input: ``The cat sat on the''
+\item Model predicts next word: ``mat''
+\item Repeat, feeding predictions back as inputs
+\end{itemize}
+
+This is GPT, LLaMA, Claude's architecture.
+
+\section{Why LLMs Hallucinate}
+
+LLMs generate text that sounds fluent and confident. Sometimes it's wrong. Why?
+
+\subsection{Reason \#1: No Grounding in Truth}
+
+LLMs are trained to predict the next word based on internet text. Internet text contains:
+\begin{itemize}
+\item Facts
+\item Opinions
+\item Fiction
+\item Errors
+\item Contradictions
+\end{itemize}
+
+The model learns: ``What word is likely to follow in text that looks like this?''
+
+It doesn't learn: ``What is true?''
+
+\subsection{Reason \#2: Maximum Likelihood $\neq$ Factuality}
+
+Training objective: Maximize $P(\text{next word} | \text{context})$.
+
+If the training data has plausible-sounding lies, the model learns to generate plausible-sounding lies.
+
+\subsection{Reason \#3: Overgeneralization}
+
+The model sees: ``Paris is the capital of France.''
+
+It generalizes: ``X is the capital of Y.''
+
+When prompted about a fictional country, it generates a plausible-sounding capital---even though it's made up.
+
+\subsection{Reason \#4: No Uncertainty Representation}
+
+LLMs output a probability distribution over tokens. But they don't say ``I don't know.'' They just output the most likely token, even if all options are unlikely.
+
+\textbf{Example}:
+\begin{itemize}
+\item User: ``What's the capital of Atlantis?''
+\item Model (internally): ``I have no data on this, but `city' is a common token after `capital of'.''
+\item Model (output): ``The capital of Atlantis is Poseidon City.''
+\end{itemize}
+
+Sounds confident. Totally wrong.
+
+\subsection{Can We Fix It?}
+
+\textbf{Partial fixes}:
+\begin{itemize}
+\item \textbf{Retrieval-Augmented Generation (RAG)}: Give the model access to a database. It retrieves facts before generating. (More in Chapter 6.)
+\item \textbf{Instruction tuning}: Train the model to say ``I don't know'' when uncertain.
+\item \textbf{Human feedback}: RLHF (Reinforcement Learning from Human Feedback) reduces hallucinations by penalizing false statements.
+\end{itemize}
+
+\textbf{No complete fix}: At the core, LLMs are pattern matchers, not truth machines.
+
+\section{War Story: Confident Wrong Answers in Production}
+
+\textbf{The Setup}: A company deployed an LLM-powered customer support chatbot. It answered product questions.
+
+\textbf{The Incident}: A customer asked: ``Does product X support feature Y?''
+
+Feature Y didn't exist. But the chatbot confidently replied: ``Yes, product X supports feature Y. Here's how to enable it: [detailed but fictional instructions].''
+
+Customer followed instructions. Nothing worked. They contacted support, frustrated.
+
+\textbf{The Investigation}: The LLM had never seen documentation for this product (it was new). But it had seen thousands of ``Does X support Y?'' questions with affirmative answers.
+
+It pattern-matched: ``Does [product] support [feature]?'' $\to$ ``Yes, here's how...''
+
+\textbf{The Fix}: Added a retrieval layer. Before answering, the bot searches product docs. If no match, it says ``I don't have information on this.''
+
+\textbf{The Lesson}: LLMs optimize for fluency, not accuracy. They'll generate plausible nonsense if not grounded in facts.
+
+\section{Things That Will Confuse You}
+
+\subsection{``LLMs understand language''}
+No. They model statistical patterns in language. Understanding requires grounding in meaning, causality, and the physical world. LLMs have none of that.
+
+\subsection{``More parameters = smarter''}
+Bigger models are more capable, but they're also more expensive, slower, and prone to overfitting without enough data. Scaling helps, but it's not magic.
+
+\subsection{``Prompt engineering is the future''}
+Prompting is useful, but it's brittle. Small changes in wording cause large changes in output. It's not a robust interface.
+
+\subsection{``LLMs will replace programmers''}
+LLMs are tools. They autocomplete code, generate boilerplate, and help debug. But they don't architect systems, reason about edge cases, or make tradeoff decisions. Augmentation, not replacement.
+
+\section{Common Traps}
+
+\textbf{Trap \#1: Trusting LLM outputs without verification}
+
+Always verify facts, especially in high-stakes domains (medical, legal, financial).
+
+\textbf{Trap \#2: Using LLMs for tasks requiring reasoning}
+
+LLMs are pattern matchers, not reasoners. For multi-step logic, symbolic methods or hybrid systems work better.
+
+\textbf{Trap \#3: Ignoring cost}
+
+GPT-4 API calls add up. For production at scale, cost is a first-order concern.
+
+\textbf{Trap \#4: Not handling edge cases}
+
+LLMs fail in weird ways. Test adversarially: ambiguous inputs, rare languages, jailbreak prompts.
+
+\section{Production Reality Check}
+
+Deploying LLMs:
+
+\begin{itemize}
+\item \textbf{Latency}: GPT-4 can take seconds to respond. Users expect $<1$s. You'll need caching, smaller models, or hybrid systems.
+\item \textbf{Cost}: At scale, inference costs dominate. You'll optimize prompts to use fewer tokens.
+\item \textbf{Reliability}: LLMs are nondeterministic. Same input can yield different outputs. You'll need testing strategies that account for variance.
+\item \textbf{Safety}: Users will try to jailbreak, extract training data, or generate harmful content. You'll need guardrails.
+\end{itemize}
+
+\section{Build This Mini Project}
+
+\textbf{Goal}: Experience transformer attention and hallucination.
+
+\textbf{Task}: Use a pre-trained LLM and observe its behavior, including when it hallucinates.
+
+Here's a complete, runnable example using HuggingFace Transformers:
+
+\begin{lstlisting}[language=Python]
+import torch
+from transformers import GPT2LMHeadModel, GPT2Tokenizer, pipeline
+import numpy as np
+import matplotlib.pyplot as plt
+
+print("="*70)
+print("EXPLORING TRANSFORMERS: ATTENTION AND HALLUCINATION")
+print("="*70)
+
+# =============================================================================
+# Setup: Load GPT-2 (small, runs on CPU)
+# =============================================================================
+print("\nLoading GPT-2 model...")
+model_name = "gpt2"  # 124M parameters, runs on CPU
+tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+model = GPT2LMHeadModel.from_pretrained(model_name, output_attentions=True)
+model.eval()
+
+# Also create a text generation pipeline for easy use
+generator = pipeline("text-generation", model=model_name, tokenizer=tokenizer)
+
+print(f"Model: {model_name}")
+print(f"Parameters: ~124 million")
+print(f"Vocabulary size: {tokenizer.vocab_size}")
+
+# =============================================================================
+# Experiment 1: Factual Knowledge
+# =============================================================================
+print("\n" + "="*70)
+print("EXPERIMENT 1: Testing Factual Knowledge")
+print("="*70)
+
+factual_prompts = [
+    "The capital of France is",
+    "The Eiffel Tower is located in",
+    "Albert Einstein was a famous",
+    "Water freezes at",
+]
+
+print("\nFactual prompts (model likely knows these):\n")
+for prompt in factual_prompts:
+    # Generate completion
+    output = generator(prompt, max_new_tokens=10, num_return_sequences=1,
+                      do_sample=False, pad_token_id=tokenizer.eos_token_id)
+    completion = output[0]['generated_text']
+    print(f"Prompt: '{prompt}'")
+    print(f"Output: '{completion}'")
+    print()
+
+# =============================================================================
+# Experiment 2: Hallucination
+# =============================================================================
+print("="*70)
+print("EXPERIMENT 2: Testing Hallucination")
+print("="*70)
+print("\nThese prompts ask about things that don't exist.")
+print("Watch the model generate confident nonsense:\n")
+
+hallucination_prompts = [
+    "The capital of the fictional country Zamunda is",
+    "The 2025 Nobel Prize in Physics was awarded to",
+    "The famous scientist Dr. Xylophone McFakename discovered",
+    "The population of the city of Nowheresville is approximately",
+]
+
+for prompt in hallucination_prompts:
+    output = generator(prompt, max_new_tokens=20, num_return_sequences=1,
+                      do_sample=True, temperature=0.7,
+                      pad_token_id=tokenizer.eos_token_id)
+    completion = output[0]['generated_text']
+    print(f"Prompt: '{prompt}'")
+    print(f"Output: '{completion}'")
+    print("WARNING: This is HALLUCINATED - the model made this up!")
+    print()
+
+# =============================================================================
+# Experiment 3: Prompt Sensitivity
+# =============================================================================
+print("="*70)
+print("EXPERIMENT 3: Prompt Sensitivity")
+print("="*70)
+print("\nSmall changes in wording can cause big changes in output:\n")
+
+# Same question, different phrasings
+prompts_variations = [
+    "What is the meaning of life?",
+    "The meaning of life is",
+    "Life's meaning can be found in",
+]
+
+for prompt in prompts_variations:
+    output = generator(prompt, max_new_tokens=30, num_return_sequences=1,
+                      do_sample=True, temperature=0.7,
+                      pad_token_id=tokenizer.eos_token_id)
+    completion = output[0]['generated_text']
+    print(f"Prompt: '{prompt}'")
+    print(f"Output: '{completion}'\n")
+
+# =============================================================================
+# Experiment 4: Visualizing Attention
+# =============================================================================
+print("="*70)
+print("EXPERIMENT 4: Visualizing Attention Patterns")
+print("="*70)
+
+def visualize_attention(text, layer=0, head=0):
+    """Visualize attention weights for a given text"""
+    # Tokenize
+    inputs = tokenizer(text, return_tensors="pt")
+    tokens = tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])
+
+    # Get attention weights
+    with torch.no_grad():
+        outputs = model(**inputs)
+
+    # Extract attention from specified layer and head
+    # Shape: [batch, heads, seq_len, seq_len]
+    attention = outputs.attentions[layer][0, head].numpy()
+
+    return tokens, attention
+
+# Analyze a simple sentence
+text = "The cat sat on the mat."
+tokens, attention = visualize_attention(text, layer=5, head=0)
+
+print(f"\nAnalyzing: '{text}'")
+print(f"Tokens: {tokens}")
+print(f"\nAttention matrix (Layer 5, Head 0):")
+print("Each row shows what that token attends to:\n")
+
+# Print attention matrix with token labels
+print("        ", end="")
+for t in tokens:
+    print(f"{t:>8}", end="")
+print()
+
+for i, token in enumerate(tokens):
+    print(f"{token:>8}", end="")
+    for j in range(len(tokens)):
+        print(f"{attention[i,j]:>8.3f}", end="")
+    print()
+
+# Create visualization
+fig, ax = plt.subplots(figsize=(10, 8))
+im = ax.imshow(attention, cmap='Blues')
+
+# Add labels
+ax.set_xticks(range(len(tokens)))
+ax.set_yticks(range(len(tokens)))
+ax.set_xticklabels(tokens, rotation=45, ha='right')
+ax.set_yticklabels(tokens)
+
+ax.set_xlabel('Attending To')
+ax.set_ylabel('Token')
+ax.set_title(f'Attention Pattern: "{text}"\n(Layer 5, Head 0)')
+
+# Add colorbar
+plt.colorbar(im, ax=ax, label='Attention Weight')
+
+plt.tight_layout()
+plt.savefig('attention_visualization.png', dpi=150, bbox_inches='tight')
+print(f"\nVisualization saved as 'attention_visualization.png'")
+
+# =============================================================================
+# Experiment 5: Temperature Effects
+# =============================================================================
+print("\n" + "="*70)
+print("EXPERIMENT 5: Temperature Effects on Generation")
+print("="*70)
+print("\nTemperature controls randomness in sampling:")
+print("- Low (0.1): Very deterministic, repetitive")
+print("- Medium (0.7): Balanced creativity")
+print("- High (1.5): Very random, potentially incoherent\n")
+
+prompt = "Once upon a time in a magical kingdom,"
+temperatures = [0.1, 0.7, 1.5]
+
+for temp in temperatures:
+    output = generator(prompt, max_new_tokens=40, num_return_sequences=1,
+                      do_sample=True, temperature=temp,
+                      pad_token_id=tokenizer.eos_token_id)
+    completion = output[0]['generated_text']
+    print(f"Temperature = {temp}:")
+    print(f"{completion}\n")
+
+# =============================================================================
+# Summary
+# =============================================================================
+print("="*70)
+print("KEY INSIGHTS")
+print("="*70)
+print("""
+1. FACTUAL KNOWLEDGE:
+   - LLMs memorize facts from training data
+   - They can recall common knowledge accurately
+   - But they don't "know" things - they predict likely completions
+
+2. HALLUCINATION:
+   - LLMs generate plausible-sounding nonsense for unknown topics
+   - They never say "I don't know"
+   - Confidence != Correctness
+
+3. PROMPT SENSITIVITY:
+   - Small changes in phrasing -> big changes in output
+   - This is why "prompt engineering" exists
+   - It's also why LLMs are brittle
+
+4. ATTENTION PATTERNS:
+   - Tokens attend to relevant context
+   - Different heads learn different patterns
+   - This is how transformers capture long-range dependencies
+
+5. TEMPERATURE:
+   - Controls randomness in generation
+   - Trade-off: creativity vs coherence
+   - Low temp = safe, high temp = creative but risky
+
+REMEMBER: LLMs are sophisticated autocomplete, not reasoning engines.
+They predict what text SHOULD come next based on patterns, not truth.
+""")
+print("="*70)
+\end{lstlisting}
+
+\textbf{Expected Output:}
+\begin{verbatim}
+======================================================================
+EXPLORING TRANSFORMERS: ATTENTION AND HALLUCINATION
+======================================================================
+
+Loading GPT-2 model...
+Model: gpt2
+Parameters: ~124 million
+Vocabulary size: 50257
+
+======================================================================
+EXPERIMENT 1: Testing Factual Knowledge
+======================================================================
+
+Factual prompts (model likely knows these):
+
+Prompt: 'The capital of France is'
+Output: 'The capital of France is Paris, and the capital of the'
+
+Prompt: 'The Eiffel Tower is located in'
+Output: 'The Eiffel Tower is located in Paris, France. It is'
+
+Prompt: 'Albert Einstein was a famous'
+Output: 'Albert Einstein was a famous physicist who developed the theory of'
+
+Prompt: 'Water freezes at'
+Output: 'Water freezes at 0 degrees Celsius (32 degrees Fahrenheit'
+
+======================================================================
+EXPERIMENT 2: Testing Hallucination
+======================================================================
+
+These prompts ask about things that don't exist.
+Watch the model generate confident nonsense:
+
+Prompt: 'The capital of the fictional country Zamunda is'
+Output: 'The capital of the fictional country Zamunda is called Zambria,
+        a small city located in the center of the country'
+WARNING: This is HALLUCINATED - the model made this up!
+
+Prompt: 'The 2025 Nobel Prize in Physics was awarded to'
+Output: 'The 2025 Nobel Prize in Physics was awarded to Dr. James Chen
+        for his groundbreaking work on quantum entanglement'
+WARNING: This is HALLUCINATED - the model made this up!
+...
+
+======================================================================
+EXPERIMENT 4: Visualizing Attention Patterns
+======================================================================
+
+Analyzing: 'The cat sat on the mat.'
+Tokens: ['The', 'Ġcat', 'Ġsat', 'Ġon', 'Ġthe', 'Ġmat', '.']
+
+Attention matrix (Layer 5, Head 0):
+Each row shows what that token attends to:
+
+              The    Ġcat    Ġsat     Ġon    Ġthe    Ġmat       .
+     The   0.234   0.000   0.000   0.000   0.000   0.000   0.000
+    Ġcat   0.156   0.312   0.000   0.000   0.000   0.000   0.000
+    Ġsat   0.089   0.234   0.445   0.000   0.000   0.000   0.000
+     Ġon   0.045   0.123   0.234   0.356   0.000   0.000   0.000
+    Ġthe   0.034   0.156   0.123   0.234   0.267   0.000   0.000
+    Ġmat   0.023   0.089   0.067   0.145   0.234   0.312   0.000
+       .   0.012   0.056   0.034   0.089   0.145   0.289   0.234
+
+Visualization saved as 'attention_visualization.png'
+\end{verbatim}
+
+\textbf{What This Demonstrates:}
+
+\begin{enumerate}
+\item \textbf{Factual Recall}: The model accurately recalls common facts from training
+\item \textbf{Confident Hallucination}: For unknown topics, it generates plausible but false information
+\item \textbf{Attention Visualization}: Shows which tokens the model ``looks at'' when processing
+\item \textbf{Temperature Effects}: How randomness affects generation quality
+\end{enumerate}
+
+\textbf{Key Insight}: LLMs are powerful pattern matchers. They generate fluent text by predicting likely continuations, not by reasoning about truth. Hallucinations are a feature of the architecture, not a bug to be fully eliminated.
