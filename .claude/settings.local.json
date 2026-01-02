@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(python compile_tex.py:*)",
+      "Bash(pdflatex:*)"
     ]
   }
 }
