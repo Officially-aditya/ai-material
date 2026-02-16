@@ -313,7 +313,7 @@ print(f"Training Accuracy: {accuracy_score(y_train, y_pred_train):.2%}")
 print(f"\nModel weights:")
 print(f"  Fur pattern (real feature): {model.coef_[0][0]:.4f}")
 print(f"  Snow % (spurious feature): {model.coef_[0][1]:.4f}")
-print(f"\n\u26a0\ufe0f  The model relies heavily on the spurious snow feature!")
+print(f"\n[WARNING] The model relies heavily on the spurious snow feature!")
 
 # Now test on realistic data (no background correlation)
 n_test = 200
@@ -332,7 +332,7 @@ for i in range(n_test):
 
 y_pred_test = model.predict(X_test)
 print(f"\nTest Accuracy (no background correlation): {accuracy_score(y_test, y_pred_test):.2%}")
-print("\U0001f4a5 Model fails when the spurious correlation disappears!")
+print(">>> Model fails when the spurious correlation disappears!")
 \end{lstlisting}
 
 \textbf{Output:}

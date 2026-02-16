@@ -9,9 +9,9 @@ For years, sequence modeling meant RNNs: process one word at a time, remember th
 
 RNNs process sequences step-by-step:
 \begin{verbatim}
-h₁ = f(x₁, h₀)
-h₂ = f(x₂, h₁)
-h₃ = f(x₃, h₂)
+h_1 = f(x_1, h_0)
+h_2 = f(x_2, h_1)
+h_3 = f(x_3, h_2)
 ...
 \end{verbatim}
 
@@ -41,12 +41,12 @@ Processing word 100? Look back at all 99 previous words, figure out which are re
 Compute similarity between query and all keys, use that to weight values.
 
 \begin{verbatim}
-Attention(Q, K, V) = softmax(QKᵀ / √d) V
+Attention(Q, K, V) = softmax(Q K^T / sqrt(d)) V
 \end{verbatim}
 
 \textbf{Intuition}:
 \begin{itemize}
-\item Q·Kᵀ measures ``how relevant is each position?''
+\item $QK^T$ measures ``how relevant is each position?''
 \item Softmax converts to probabilities
 \item Multiply by V to get weighted sum of relevant info
 \end{itemize}
@@ -61,7 +61,7 @@ Attention(Q, K, V) = softmax(QKᵀ / √d) V
 
 \section{The Mathematics of Attention: A Deep Dive}
 
-The attention formula \texttt{Attention(Q, K, V) = softmax(QKᵀ / √d) V} looks simple, but there's deep mathematics behind each component. This section rigorously derives why attention works and why each piece is necessary.
+The attention formula $\text{Attention}(Q, K, V) = \text{softmax}(QK^T / \sqrt{d})\, V$ looks simple, but there's deep mathematics behind each component. This section rigorously derives why attention works and why each piece is necessary.
 
 \subsection{Scaled Dot-Product Attention: The Full Derivation}
 
@@ -75,17 +75,17 @@ The attention formula \texttt{Attention(Q, K, V) = softmax(QKᵀ / √d) V} look
 
 Result: $Q, K \in \mathbb{R}^{n \times d_k}$, $V \in \mathbb{R}^{n \times d_v}$
 
-\textbf{Step 1: Computing Similarity (QKᵀ)}
+\textbf{Step 1: Computing Similarity ($QK^T$)}
 
 For each query vector $q_i$ and key vector $k_j$, compute dot product:
 \begin{verbatim}
-score(qᵢ, kⱼ) = qᵢ · kⱼ = ∑ₗ qᵢₗ kⱼₗ
+score(q_i, k_j) = q_i . k_j = sum_l (q_il * k_jl)
 \end{verbatim}
 
 In matrix form:
 \begin{verbatim}
-S = QKᵀ ∈ ℝⁿˣⁿ
-Sᵢⱼ = qᵢ · kⱼ
+S = Q K^T    (S is n x n)
+S_ij = q_i . k_j
 \end{verbatim}
 
 \textbf{Interpretation}: $S_{ij}$ measures how much query i ``cares about'' key j.
@@ -127,7 +127,7 @@ As dimensionality $d_k$ increases, dot products grow large. Consider:
 
 \textbf{Expected value}:
 \begin{verbatim}
-E[qᵢ · kⱼ] = E[∑ₗ qᵢₗ kⱼₗ] = ∑ₗ E[qᵢₗ kⱼₗ] = ∑ₗ E[qᵢₗ]E[kⱼₗ] = 0
+E[q_i . k_j] = E[sum_l q_il k_jl] = sum_l E[q_il k_jl] = sum_l E[q_il]E[k_jl] = 0
 \end{verbatim}
 (assuming independence)
 
@@ -147,7 +147,7 @@ E[qᵢ · kⱼ] = E[∑ₗ qᵢₗ kⱼₗ] = ∑ₗ E[qᵢₗ kⱼₗ] = ∑ₗ
 
 After softmax, we compute:
 \begin{verbatim}
-softmax(Sᵢ)ⱼ = exp(Sᵢⱼ) / ∑ₖ exp(Sᵢₖ)
+softmax(S_i)_j = exp(S_ij) / sum_k exp(S_ik)
 \end{verbatim}
 
 If $S_{ij}$ are large (say, range [-100, 100] for $d_k=1024$):
@@ -377,7 +377,7 @@ attention_weights = softmax(scores)
 
 Breaking it down:
 \begin{enumerate}
-\item \textbf{QKᵀ}: $(n \times d_k) @ (d_k \times n) = O(n^2 d_k)$
+\item \textbf{$QK^T$}: $(n \times d_k) @ (d_k \times n) = O(n^2 d_k)$
 \item \textbf{Softmax}: $O(n^2)$ (row-wise)
 \item \textbf{AV}: $(n \times n) @ (n \times d_v) = O(n^2 d_v)$
 \end{enumerate}
@@ -422,7 +422,7 @@ lookup(query, dict) = dict[key]  if exact match, else None
 
 Attention:
 \begin{verbatim}
-lookup(query, dict) = ∑_i similarity(query, keyᵢ) · valueᵢ
+lookup(query, dict) = sum_i similarity(query, key_i) * value_i
 \end{verbatim}
 
 \textbf{Analogy}:
@@ -510,8 +510,8 @@ Now similarity is measurable: dot product or cosine distance.
 Surprisingly, embeddings capture semantic and syntactic relationships:
 
 \begin{verbatim}
-king - man + woman ≈ queen
-Paris - France + Germany ≈ Berlin
+king - man + woman ~ queen
+Paris - France + Germany ~ Berlin
 \end{verbatim}
 
 \textbf{Why?} Distributional hypothesis: ``Words in similar contexts have similar meanings.'' The model learns these regularities from massive data.
@@ -921,7 +921,7 @@ Transformers universally use Layer Normalization instead of Batch Normalization.
 For input $x \in \mathbb{R}^{B \times N \times D}$ (batch size B, sequence length N, features D):
 \begin{verbatim}
 BatchNorm: Normalize across B for each position n and feature d
-μ = (1/B) ∑_{b=1}^B x_{b,n,d}
+mu = (1/B) sum_{b=1}^B x_{b,n,d}
 \end{verbatim}
 
 \textbf{Problem for variable-length sequences}:
@@ -1690,18 +1690,18 @@ EXPERIMENT 4: Visualizing Attention Patterns
 ======================================================================
 
 Analyzing: 'The cat sat on the mat.'
-Tokens: ['The', 'Ġcat', 'Ġsat', 'Ġon', 'Ġthe', 'Ġmat', '.']
+Tokens: ['The', '_cat', '_sat', '_on', '_the', '_mat', '.']
 
 Attention matrix (Layer 5, Head 0):
 Each row shows what that token attends to:
 
-              The    Ġcat    Ġsat     Ġon    Ġthe    Ġmat       .
+              The    _cat    _sat     _on    _the    _mat       .
      The   0.234   0.000   0.000   0.000   0.000   0.000   0.000
-    Ġcat   0.156   0.312   0.000   0.000   0.000   0.000   0.000
-    Ġsat   0.089   0.234   0.445   0.000   0.000   0.000   0.000
-     Ġon   0.045   0.123   0.234   0.356   0.000   0.000   0.000
-    Ġthe   0.034   0.156   0.123   0.234   0.267   0.000   0.000
-    Ġmat   0.023   0.089   0.067   0.145   0.234   0.312   0.000
+    _cat   0.156   0.312   0.000   0.000   0.000   0.000   0.000
+    _sat   0.089   0.234   0.445   0.000   0.000   0.000   0.000
+     _on   0.045   0.123   0.234   0.356   0.000   0.000   0.000
+    _the   0.034   0.156   0.123   0.234   0.267   0.000   0.000
+    _mat   0.023   0.089   0.067   0.145   0.234   0.312   0.000
        .   0.012   0.056   0.034   0.089   0.145   0.289   0.234
 
 Visualization saved as 'attention_visualization.png'

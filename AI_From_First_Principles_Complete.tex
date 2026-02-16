@@ -633,7 +633,7 @@ print(f"Training Accuracy: {accuracy_score(y_train, y_pred_train):.2%}")
 print(f"\nModel weights:")
 print(f"  Fur pattern (real feature): {model.coef_[0][0]:.4f}")
 print(f"  Snow % (spurious feature): {model.coef_[0][1]:.4f}")
-print(f"\n\u26a0\ufe0f  The model relies heavily on the spurious snow feature!")
+print(f"\n[WARNING] The model relies heavily on the spurious snow feature!")
 
 # Now test on realistic data (no background correlation)
 n_test = 200
@@ -652,7 +652,7 @@ for i in range(n_test):
 
 y_pred_test = model.predict(X_test)
 print(f"\nTest Accuracy (no background correlation): {accuracy_score(y_test, y_pred_test):.2%}")
-print("\U0001f4a5 Model fails when the spurious correlation disappears!")
+print(">>> Model fails when the spurious correlation disappears!")
 \end{lstlisting}
 
 \textbf{Output:}
@@ -2846,7 +2846,7 @@ for degree, color in zip(degrees, colors):
     if degree == 1:
         status = "UNDERFIT (high bias)"
     elif degree == 4:
-        status = "GOOD FIT ✓"
+        status = "GOOD FIT (ok)"
     else:
         status = "OVERFIT (high variance)"
 
@@ -2891,7 +2891,7 @@ for alpha in alphas:
         if alpha == 0.0001:
             effect = "Light regularization"
         elif alpha == 0.01:
-            effect = "Good regularization ✓"
+            effect = "Good regularization (ok)"
         else:
             effect = "Too much (underfit)"
 
@@ -2908,7 +2908,7 @@ print("-" * 55)
 
 # Save visualization
 plt.savefig('bias_variance_tradeoff.png', dpi=150, bbox_inches='tight')
-print("\n📊 Visualization saved as 'bias_variance_tradeoff.png'")
+print("\n[*] Visualization saved as 'bias_variance_tradeoff.png'")
 \end{lstlisting}
 
 \textbf{Expected Output}:
@@ -2926,7 +2926,7 @@ Model Performance:
 Degree     Train MSE       Test MSE        Status
 --------------------------------------------------
 1          0.4523          0.4892          UNDERFIT (high bias)
-4          0.0734          0.1124          GOOD FIT ✓
+4          0.0734          0.1124          GOOD FIT (ok)
 15         0.0312          0.5765          OVERFIT (high variance)
 --------------------------------------------------
 
@@ -2938,11 +2938,11 @@ Alpha (λ)    Train MSE       Test MSE        Effect
 -------------------------------------------------------
 0            0.0312          0.5765          No regularization (overfit)
 0.0001       0.0456          0.2341          Light regularization
-0.01         0.0812          0.1198          Good regularization ✓
+0.01         0.0812          0.1198          Good regularization (ok)
 1.0          0.3234          0.3567          Too much (underfit)
 -------------------------------------------------------
 
-📊 Visualization saved as 'bias_variance_tradeoff.png'
+[*] Visualization saved as 'bias_variance_tradeoff.png'
 \end{lstlisting}
 
 \textbf{What This Demonstrates}:
@@ -8024,7 +8024,7 @@ model.fit(X_train, y_train)
 y_pred_2020 = model.predict(X_test_2020)
 accuracy_2020 = accuracy_score(y_test_2020, y_pred_2020)
 
-print(f"\n✅ Model trained successfully")
+print(f"\n[OK] Model trained successfully")
 print(f"\n2020 Test Set Performance:")
 print(f"Accuracy: {accuracy_2020:.1%}")
 print("\nClassification Report:")
@@ -8040,7 +8040,7 @@ baseline_stats = {
     for feature in features
 }
 
-print("📊 Baseline feature distributions saved for drift detection")
+print("[*] Baseline feature distributions saved for drift detection")
 
 # =============================================================================
 # STEP 3: Simulate data drift (2024 data arrives)
@@ -8084,7 +8084,7 @@ def detect_drift(baseline_data, new_data, feature_name, alpha=0.05):
 
     return is_drifted, p_value, effect_size, statistic
 
-print("\nDrift Detection Results (Kolmogorov-Smirnov Test, α=0.05):")
+print("\nDrift Detection Results (Kolmogorov-Smirnov Test, alpha=0.05):")
 print("-" * 70)
 print(f"{'Feature':<20} {'Drifted?':<10} {'p-value':<12} {'Effect Size':<12} {'KS Stat':<10}")
 print("-" * 70)
@@ -8096,7 +8096,7 @@ for feature in features:
 
     is_drifted, p_value, effect_size, ks_stat = detect_drift(baseline, current, feature)
 
-    status = "⚠️ YES" if is_drifted else "✓ No"
+    status = "[!] YES" if is_drifted else "(ok) No"
 
     print(f"{feature:<20} {status:<10} {p_value:<12.6f} {effect_size:<12.2f} {ks_stat:<10.3f}")
 
@@ -8104,7 +8104,7 @@ for feature in features:
         drifted_features.append(feature)
 
 print("-" * 70)
-print(f"\n🚨 {len(drifted_features)} features show significant drift: {drifted_features}")
+print(f"\n[ALERT] {len(drifted_features)} features show significant drift: {drifted_features}")
 
 # =============================================================================
 # STEP 5: Observe performance degradation
@@ -8119,14 +8119,14 @@ accuracy_2024 = accuracy_score(y_2024, y_pred_2024)
 
 print(f"\n2020 Model → 2024 Data:")
 print(f"Accuracy: {accuracy_2024:.1%}")
-print(f"\n📉 Accuracy dropped from {accuracy_2020:.1%} to {accuracy_2024:.1%}")
+print(f"\n[>>] Accuracy dropped from {accuracy_2020:.1%} to {accuracy_2024:.1%}")
 print(f"   Relative degradation: {((accuracy_2020 - accuracy_2024) / accuracy_2020 * 100):.1f}%")
 
 print("\nClassification Report (2020 model on 2024 data):")
 print(classification_report(y_2024, y_pred_2024, target_names=['Ham', 'Spam']))
 
 # Analyze errors
-print("\n🔍 Error Analysis:")
+print("\n[>>] Error Analysis:")
 errors = data_2024[y_pred_2024 != y_2024]
 false_negatives = errors[errors['is_spam'] == 1]  # Spam marked as ham
 false_positives = errors[errors['is_spam'] == 0]  # Ham marked as spam
@@ -8167,9 +8167,9 @@ y_2024_test = data_2024_test['is_spam']
 y_pred_retrained = model_retrained.predict(X_2024_test)
 accuracy_retrained = accuracy_score(y_2024_test, y_pred_retrained)
 
-print(f"\n✅ Retrained model performance on new 2024 data:")
+print(f"\n[OK] Retrained model performance on new 2024 data:")
 print(f"Accuracy: {accuracy_retrained:.1%}")
-print(f"\n📈 Accuracy recovered from {accuracy_2024:.1%} to {accuracy_retrained:.1%}")
+print(f"\n[+] Accuracy recovered from {accuracy_2024:.1%} to {accuracy_retrained:.1%}")
 
 # =============================================================================
 # STEP 7: Visualize the drift
@@ -8192,7 +8192,7 @@ for idx, feature in enumerate(features):
     ax.hist(X_2024[feature], bins=30, alpha=0.5, label='2024 (new)',
             density=True, color='red')
 
-    ax.set_title(f'{feature}\n({"⚠️ DRIFTED" if feature in drifted_features else "✓ Stable"})')
+    ax.set_title(f'{feature}\n({"[!] DRIFTED" if feature in drifted_features else "(ok) Stable"})')
     ax.set_xlabel(feature)
     ax.set_ylabel('Density')
     ax.legend()
@@ -8210,7 +8210,7 @@ for i, v in enumerate([accuracy_2020, accuracy_2024, accuracy_retrained]):
 
 plt.tight_layout()
 plt.savefig('drift_visualization.png', dpi=150, bbox_inches='tight')
-print("📊 Saved visualization to drift_visualization.png")
+print("[*] Saved visualization to drift_visualization.png")
 
 # =============================================================================
 # SUMMARY
@@ -8239,10 +8239,10 @@ What we demonstrated:
    → Accuracy restored to {:.1%}
 
 KEY TAKEAWAYS:
-• Monitor feature distributions continuously
-• Set up alerts for statistical drift (KS test, PSI, etc.)
-• Plan for regular retraining cycles
-• Log predictions and ground truth for performance tracking
+- Monitor feature distributions continuously
+- Set up alerts for statistical drift (KS test, PSI, etc.)
+- Plan for regular retraining cycles
+- Log predictions and ground truth for performance tracking
 """.format(
     accuracy_2020,
     len(drifted_features),
@@ -8274,7 +8274,7 @@ Test set (2020): 400 emails
 STEP 2: Train Model on 2020 Data
 ======================================================================
 
-✅ Model trained successfully
+[OK] Model trained successfully
 
 2020 Test Set Performance:
 Accuracy: 91.2%
@@ -8284,7 +8284,7 @@ Classification Report:
          Ham       0.93      0.95      0.94       280
         Spam       0.88      0.83      0.85       120
 
-📊 Baseline feature distributions saved for drift detection
+[*] Baseline feature distributions saved for drift detection
 
 ======================================================================
 STEP 3: Simulate Data Drift - 2024 Data Arrives
@@ -8296,18 +8296,18 @@ Spam ratio: 35.0%
 STEP 4: Detect Data Drift
 ======================================================================
 
-Drift Detection Results (Kolmogorov-Smirnov Test, α=0.05):
+Drift Detection Results (Kolmogorov-Smirnov Test, alpha=0.05):
 ----------------------------------------------------------------------
 Feature              Drifted?   p-value      Effect Size  KS Stat
 ----------------------------------------------------------------------
-word_count           ⚠️ YES     0.000001     0.85         0.234
-link_count           ⚠️ YES     0.000023     0.42         0.189
-urgent_words         ⚠️ YES     0.001245     0.38         0.156
-money_mentions       ✓ No       0.089234     0.21         0.098
-sender_reputation    ⚠️ YES     0.000089     0.52         0.201
+word_count           [!] YES     0.000001     0.85         0.234
+link_count           [!] YES     0.000023     0.42         0.189
+urgent_words         [!] YES     0.001245     0.38         0.156
+money_mentions       (ok) No       0.089234     0.21         0.098
+sender_reputation    [!] YES     0.000089     0.52         0.201
 ----------------------------------------------------------------------
 
-🚨 4 features show significant drift: ['word_count', 'link_count', 'urgent_words', 'sender_reputation']
+[ALERT] 4 features show significant drift: ['word_count', 'link_count', 'urgent_words', 'sender_reputation']
 
 ======================================================================
 STEP 5: Observe Performance Degradation
@@ -8316,10 +8316,10 @@ STEP 5: Observe Performance Degradation
 2020 Model → 2024 Data:
 Accuracy: 76.4%
 
-📉 Accuracy dropped from 91.2% to 76.4%
+[>>] Accuracy dropped from 91.2% to 76.4%
    Relative degradation: 16.2%
 
-🔍 Error Analysis:
+[>>] Error Analysis:
    False Negatives (missed spam): 89
    False Positives (ham marked spam): 29
 
@@ -8335,10 +8335,10 @@ Combined training set: 2100 emails
   - 2020 data: 1600 emails
   - 2024 data: 500 emails
 
-✅ Retrained model performance on new 2024 data:
+[OK] Retrained model performance on new 2024 data:
 Accuracy: 88.5%
 
-📈 Accuracy recovered from 76.4% to 88.5%
+[+] Accuracy recovered from 76.4% to 88.5%
 
 ======================================================================
 SUMMARY: Model Drift Detection Pipeline
@@ -8364,10 +8364,10 @@ What we demonstrated:
    → Accuracy restored to 88.5%
 
 KEY TAKEAWAYS:
-• Monitor feature distributions continuously
-• Set up alerts for statistical drift (KS test, PSI, etc.)
-• Plan for regular retraining cycles
-• Log predictions and ground truth for performance tracking
+- Monitor feature distributions continuously
+- Set up alerts for statistical drift (KS test, PSI, etc.)
+- Plan for regular retraining cycles
+- Log predictions and ground truth for performance tracking
 \end{lstlisting}
 
 \textbf{The Key Insight}: This example shows why production ML systems need continuous monitoring. The 2020 spam classifier worked great---until spammers evolved. Without drift detection, you wouldn't know your model was failing until users complained. With monitoring, you catch the problem early and retrain proactively.

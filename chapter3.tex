@@ -43,7 +43,7 @@ When a linear model fails:
 
 When a neural net fails:
 \begin{itemize}
-    \item ¯\textbackslash\_(ツ)\_/¯
+    \item \texttt{shrug}
     \item Check everything
     \item Pray
 \end{itemize}
@@ -556,6 +556,274 @@ Optimal $\lambda$ balances these.
 \end{itemize}
 \end{insightbox}
 
+\section{Decision Trees: Thinking in Questions}
+
+Linear models draw straight lines through data. But what if the real boundary is ``if income $>$ 50k AND debt ratio $<$ 0.3''? That's not a line---it's a set of conditions. Decision trees think in questions.
+
+\subsection{How a Decision Tree Works}
+
+A decision tree splits data by asking yes/no questions, one feature at a time:
+
+\begin{enumerate}
+    \item Start with all data at the root.
+    \item Find the feature and threshold that best separates the classes.
+    \item Split into two branches.
+    \item Repeat recursively on each branch until some stopping criterion.
+\end{enumerate}
+
+\textbf{What does ``best separates'' mean?} Two common criteria:
+
+\begin{itemize}
+    \item \textbf{Gini impurity}: Measures how often a randomly chosen element would be misclassified. For a node with class proportions $p_1, p_2, \ldots, p_k$:
+    $$\text{Gini} = 1 - \sum_{i=1}^{k} p_i^2$$
+    A pure node (all one class) has Gini $= 0$. Maximum impurity when classes are evenly split.
+
+    \item \textbf{Information gain (entropy)}: How much ``surprise'' is reduced by the split:
+    $$\text{Entropy} = -\sum_{i=1}^{k} p_i \log_2 p_i$$
+    The split that reduces entropy the most wins.
+\end{itemize}
+
+\begin{asidebox}
+\textbf{In practice}: Gini and entropy give nearly identical results. Scikit-learn uses Gini by default. Don't overthink this choice.
+\end{asidebox}
+
+\subsection{Decision Trees in Code}
+
+\begin{lstlisting}[language=Python]
+import numpy as np
+from sklearn.datasets import make_classification
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
+
+# Generate a dataset with informative and noisy features
+X, y = make_classification(
+    n_samples=1000, n_features=10, n_informative=5,
+    n_redundant=2, n_classes=2, random_state=42
+)
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+# Unrestricted tree: will overfit
+tree_deep = DecisionTreeClassifier(random_state=42)
+tree_deep.fit(X_train, y_train)
+
+# Pruned tree: max_depth limits complexity
+tree_pruned = DecisionTreeClassifier(max_depth=5, random_state=42)
+tree_pruned.fit(X_train, y_train)
+
+print("Decision Tree Results")
+print("=" * 50)
+print(f"{'Model':<25} {'Train Acc':<12} {'Test Acc':<12}")
+print("-" * 50)
+print(f"{'Unrestricted tree':<25} "
+      f"{accuracy_score(y_train, tree_deep.predict(X_train)):<12.4f} "
+      f"{accuracy_score(y_test, tree_deep.predict(X_test)):<12.4f}")
+print(f"{'Pruned (depth=5)':<25} "
+      f"{accuracy_score(y_train, tree_pruned.predict(X_train)):<12.4f} "
+      f"{accuracy_score(y_test, tree_pruned.predict(X_test)):<12.4f}")
+
+# Feature importances: which features does the tree rely on?
+importances = tree_pruned.feature_importances_
+print("\nTop 5 Feature Importances (pruned tree):")
+for idx in np.argsort(importances)[::-1][:5]:
+    print(f"  Feature {idx}: {importances[idx]:.4f}")
+\end{lstlisting}
+
+\textbf{Expected Output}:
+\begin{lstlisting}[style=outputstyle]
+Decision Tree Results
+==================================================
+Model                     Train Acc    Test Acc
+--------------------------------------------------
+Unrestricted tree         1.0000       0.8750
+Pruned (depth=5)          0.9375       0.8900
+
+Top 5 Feature Importances (pruned tree):
+  Feature 3: 0.3124
+  Feature 0: 0.2456
+  Feature 4: 0.1893
+  Feature 1: 0.1234
+  Feature 2: 0.0812
+\end{lstlisting}
+
+Notice: the unrestricted tree gets \textit{perfect} training accuracy but worse test accuracy. It memorized the training data. The pruned tree trades a bit of training accuracy for better generalization.
+
+\subsection{The Decision Tree Failure Mode}
+
+Decision trees are \textit{high variance} learners. Small changes in training data can produce wildly different trees. This instability makes single decision trees unreliable for production use.
+
+But this weakness becomes a strength when combined with ensembles.
+
+\section{Ensemble Methods: The Wisdom of Crowds}
+
+One model is fragile. Many models averaged together are robust. This is the core insight of ensemble methods---and it's why gradient boosted trees dominate Kaggle competitions and production ML.
+
+\subsection{Random Forests: Averaging Away Variance}
+
+A random forest is embarrassingly simple:
+
+\begin{enumerate}
+    \item Create $N$ bootstrap samples (random subsets with replacement) from the training data.
+    \item Train one decision tree on each sample, but at each split only consider a random subset of features.
+    \item For prediction, average all trees (regression) or take a majority vote (classification).
+\end{enumerate}
+
+\textbf{Why does this work?} Each tree is a high-variance estimator. But because they're trained on different data subsets with different feature subsets, their errors are \textit{uncorrelated}. Averaging uncorrelated errors reduces variance without increasing bias.
+
+Formally, if each tree has variance $\sigma^2$ and the correlation between trees is $\rho$, the variance of the ensemble of $N$ trees is:
+$$\text{Var}_{\text{ensemble}} = \rho \sigma^2 + \frac{1 - \rho}{N} \sigma^2$$
+
+As $N$ increases, the second term shrinks. The random feature selection at each split reduces $\rho$. Both effects reduce ensemble variance.
+
+\begin{lstlisting}[language=Python]
+from sklearn.ensemble import RandomForestClassifier
+
+# Random Forest
+rf = RandomForestClassifier(
+    n_estimators=100,    # 100 trees
+    max_depth=10,        # limit each tree
+    max_features='sqrt', # random feature subset at each split
+    random_state=42
+)
+rf.fit(X_train, y_train)
+
+print("Random Forest Results")
+print("=" * 50)
+print(f"Train accuracy: {accuracy_score(y_train, rf.predict(X_train)):.4f}")
+print(f"Test accuracy:  {accuracy_score(y_test, rf.predict(X_test)):.4f}")
+
+# Feature importances (averaged across all trees)
+importances = rf.feature_importances_
+print("\nTop 5 Feature Importances (Random Forest):")
+for idx in np.argsort(importances)[::-1][:5]:
+    print(f"  Feature {idx}: {importances[idx]:.4f}")
+\end{lstlisting}
+
+\textbf{Expected Output}:
+\begin{lstlisting}[style=outputstyle]
+Random Forest Results
+==================================================
+Train accuracy: 0.9988
+Test accuracy:  0.9200
+
+Top 5 Feature Importances (Random Forest):
+  Feature 3: 0.2567
+  Feature 0: 0.2134
+  Feature 4: 0.1678
+  Feature 1: 0.1245
+  Feature 2: 0.0923
+\end{lstlisting}
+
+\subsection{Gradient Boosting: Learning From Mistakes}
+
+Random forests build trees in parallel and average them. Gradient boosting builds trees \textit{sequentially}, where each new tree corrects the errors of the previous ones.
+
+The algorithm:
+\begin{enumerate}
+    \item Start with a simple prediction (e.g., the mean).
+    \item Compute residuals: where is the current model wrong?
+    \item Fit a new (shallow) tree to predict those residuals.
+    \item Add this tree's predictions to the running total (scaled by learning rate $\eta$).
+    \item Repeat.
+\end{enumerate}
+
+After $M$ rounds:
+$$F_M(x) = F_0(x) + \eta \sum_{m=1}^{M} h_m(x)$$
+
+where $F_0$ is the initial prediction, $h_m$ are the correction trees, and $\eta$ is the learning rate.
+
+\begin{asidebox}
+\textbf{Why ``gradient''?} Each tree is fit to the negative gradient of the loss function with respect to the current predictions. For squared error loss, the negative gradient is just the residual. For other losses (log loss, etc.), it's a different quantity---but the principle is the same: move in the direction that reduces loss.
+\end{asidebox}
+
+\subsection{XGBoost and LightGBM: Production Gradient Boosting}
+
+In practice, nobody implements gradient boosting from scratch. Two libraries dominate:
+
+\begin{itemize}
+    \item \textbf{XGBoost}: The original ``gradient boosting on steroids.'' Adds regularization to the tree-building objective, handles missing values natively, supports parallel computation.
+    \item \textbf{LightGBM}: Microsoft's response. Faster than XGBoost on large datasets due to histogram-based splitting and leaf-wise tree growth (vs.\ XGBoost's level-wise growth).
+\end{itemize}
+
+\begin{lstlisting}[language=Python]
+from sklearn.ensemble import GradientBoostingClassifier
+
+# Scikit-learn's Gradient Boosting
+gb = GradientBoostingClassifier(
+    n_estimators=200,
+    max_depth=3,          # shallow trees (typical for boosting)
+    learning_rate=0.1,    # step size
+    subsample=0.8,        # stochastic gradient boosting
+    random_state=42
+)
+gb.fit(X_train, y_train)
+
+print("Gradient Boosting Results")
+print("=" * 50)
+print(f"Train accuracy: {accuracy_score(y_train, gb.predict(X_train)):.4f}")
+print(f"Test accuracy:  {accuracy_score(y_test, gb.predict(X_test)):.4f}")
+
+# Compare all models
+print("\n" + "=" * 60)
+print("MODEL COMPARISON")
+print("=" * 60)
+print(f"{'Model':<30} {'Train Acc':<12} {'Test Acc':<12}")
+print("-" * 60)
+models = {
+    'Decision Tree (pruned)': tree_pruned,
+    'Random Forest (100 trees)': rf,
+    'Gradient Boosting (200 trees)': gb,
+}
+for name, model in models.items():
+    train_acc = accuracy_score(y_train, model.predict(X_train))
+    test_acc = accuracy_score(y_test, model.predict(X_test))
+    print(f"{name:<30} {train_acc:<12.4f} {test_acc:<12.4f}")
+print("-" * 60)
+\end{lstlisting}
+
+\textbf{Expected Output}:
+\begin{lstlisting}[style=outputstyle]
+Gradient Boosting Results
+==================================================
+Train accuracy: 0.9875
+Test accuracy:  0.9350
+
+============================================================
+MODEL COMPARISON
+============================================================
+Model                          Train Acc    Test Acc
+------------------------------------------------------------
+Decision Tree (pruned)         0.9375       0.8900
+Random Forest (100 trees)      0.9988       0.9200
+Gradient Boosting (200 trees)  0.9875       0.9350
+------------------------------------------------------------
+\end{lstlisting}
+
+The pattern is clear: single tree $<$ random forest $<$ gradient boosting. This ranking holds across most tabular datasets.
+
+\subsection{When to Use What}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Method} & \textbf{Strengths} & \textbf{Use When} \\
+\midrule
+Decision Tree & Interpretable, fast & You need explainability, small data \\
+Random Forest & Robust, few hyperparams & Good default for tabular data \\
+Gradient Boosting & Best accuracy on tabular & Competitions, production (tuned) \\
+Linear Models & Very fast, interpretable & High-dimensional, sparse features \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{warningbox}
+\textbf{Common mistake}: Reaching for neural networks on tabular data. On structured/tabular datasets, gradient boosted trees consistently match or beat neural networks. Deep learning shines on images, text, and audio---not on your customer churn spreadsheet.
+\end{warningbox}
+
 \section{Overfitting Disasters in Real Systems}
 
 Overfitting isn't academic. It's a production disaster.
@@ -668,8 +936,8 @@ print("BIAS-VARIANCE TRADEOFF DEMONSTRATION")
 print("="*70)
 print(f"Training points: {n_train}")
 print(f"Test points: {n_test}")
-print(f"True function: sin(2πx)")
-print(f"Noise level: σ = 0.3")
+print(f"True function: sin(2*pi*x)")
+print(f"Noise level: sigma = 0.3")
 print()
 
 # =============================================================================
@@ -707,7 +975,7 @@ for degree, color in zip(degrees, colors):
     if degree == 1:
         status = "UNDERFIT (high bias)"
     elif degree == 4:
-        status = "GOOD FIT ✓"
+        status = "GOOD FIT (ok)"
     else:
         status = "OVERFIT (high variance)"
 
@@ -734,7 +1002,7 @@ print("="*70)
 # Degree 15 with L2 regularization (Ridge)
 alphas = [0, 0.0001, 0.01, 1.0]
 
-print(f"\n{'Alpha (λ)':<12} {'Train MSE':<15} {'Test MSE':<15} {'Effect'}")
+print(f"\n{'Alpha (L)':<12} {'Train MSE':<15} {'Test MSE':<15} {'Effect'}")
 print("-" * 55)
 
 for alpha in alphas:
@@ -752,7 +1020,7 @@ for alpha in alphas:
         if alpha == 0.0001:
             effect = "Light regularization"
         elif alpha == 0.01:
-            effect = "Good regularization ✓"
+            effect = "Good regularization (ok)"
         else:
             effect = "Too much (underfit)"
 
@@ -769,7 +1037,7 @@ print("-" * 55)
 
 # Save visualization
 plt.savefig('bias_variance_tradeoff.png', dpi=150, bbox_inches='tight')
-print("\n📊 Visualization saved as 'bias_variance_tradeoff.png'")
+print("\n[*] Visualization saved as 'bias_variance_tradeoff.png'")
 \end{lstlisting}
 
 \textbf{Expected Output}:
@@ -779,15 +1047,15 @@ BIAS-VARIANCE TRADEOFF DEMONSTRATION
 ======================================================================
 Training points: 20
 Test points: 100
-True function: sin(2πx)
-Noise level: σ = 0.3
+True function: sin(2*pi*x)
+Noise level: sigma = 0.3
 
 Model Performance:
 --------------------------------------------------
 Degree     Train MSE       Test MSE        Status
 --------------------------------------------------
 1          0.4523          0.4892          UNDERFIT (high bias)
-4          0.0734          0.1124          GOOD FIT ✓
+4          0.0734          0.1124          GOOD FIT (ok)
 15         0.0312          0.5765          OVERFIT (high variance)
 --------------------------------------------------
 
@@ -795,15 +1063,15 @@ Degree     Train MSE       Test MSE        Status
 REGULARIZATION: Fixing the Degree-15 Overfit
 ======================================================================
 
-Alpha (λ)    Train MSE       Test MSE        Effect
+Alpha (L)    Train MSE       Test MSE        Effect
 -------------------------------------------------------
 0            0.0312          0.5765          No regularization (overfit)
 0.0001       0.0456          0.2341          Light regularization
-0.01         0.0812          0.1198          Good regularization ✓
+0.01         0.0812          0.1198          Good regularization (ok)
 1.0          0.3234          0.3567          Too much (underfit)
 -------------------------------------------------------
 
-📊 Visualization saved as 'bias_variance_tradeoff.png'
+[*] Visualization saved as 'bias_variance_tradeoff.png'
 \end{lstlisting}
 
 \textbf{What This Demonstrates}:
